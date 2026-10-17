@@ -1,0 +1,236 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum Role {
+  CUSTOMER
+  DRIVER
+  ADMIN
+}
+
+enum VehicleType {
+  RODA_MOTOR
+  RODA_MOBIL
+}
+
+enum OrderStatus {
+  SEARCHING
+  ACCEPTED
+  PICKING_UP
+  ON_TRIP
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  QRIS
+  RODA_PAY
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String?
+  role      Role     @default(CUSTOMER)
+  phone     String?
+  googleId  String?  @unique
+  avatar    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  driver   Driver?
+  orders   Order[]  @relation("CustomerOrders")
+  sessions Session[]
+  reviews  Review[]
+  wallet   Wallet?
+}
+
+model Driver {
+  id            String      @id @default(cuid())
+  userId        String      @unique
+  vehicleType   VehicleType @default(RODA_MOTOR)
+  plateNumber   String
+  /// Merek / tipe kendaraan mitra (mis. Honda Beat / Toyota Avanza).
+  vehicleBrand  String?
+  isOnline      Boolean     @default(false)
+  /// Ditangguhkan administrator: tidak bisa login / online.
+  isBlocked     Boolean     @default(false)
+  lastLat       Float?
+  lastLng       Float?
+  rating        Float       @default(5.0)
+  /// Rolling average of customer reviews, recomputed on every new review.
+  ratingAvg     Float       @default(5.0)
+  /// Number of completed trips that produced a review.
+  totalTrips    Int         @default(0)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders  Order[]  @relation("DriverOrders")
+  reviews Review[]
+}
+
+model Order {
+  id             String      @id @default(cuid())
+  customerId     String
+  driverId       String?
+  vehicleType    VehicleType @default(RODA_MOTOR)
+  status         OrderStatus @default(SEARCHING)
+
+  pickupLat      Float
+  pickupLng      Float
+  pickupAddress  String?
+  dropoffLat     Float
+  dropoffLng     Float
+  dropoffAddress String?
+
+  distanceKm     Float
+  fare           Int
+  /// Kode promo yang dipakai pelanggan (mis. RODAHEMAT), null bila tanpa voucher.
+  promoCode      String?
+  /// Besaran potongan harga dalam rupiah yang sudah divalidasi server.
+  discount       Int      @default(0)
+  /// Catatan patokan opsional untuk driver (mis. "tunggu di lobi utara").
+  driverNote     String?
+  /// Alasan pembatalan yang dipilih pelanggan saat membatalkan pesanan.
+  cancelReason   String?
+  /// Estimated travel time from the routing engine (minutes).
+  durationMin    Float?
+  /// "OSRM" when a real road route was used, "FALLBACK" when estimated.
+  routeSource    String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  customer User     @relation("CustomerOrders", fields: [customerId], references: [id])
+  driver   Driver?  @relation("DriverOrders", fields: [driverId], references: [id])
+
+  payment Payment?
+  review  Review?
+
+  @@index([status])
+  @@index([customerId])
+}
+
+/// One payment per order. amount is Decimal per spec; SQLite has no native
+/// DECIMAL so Prisma maps it to NUMERIC/REAL.
+model Payment {
+  id        String        @id @default(uuid())
+  orderId   String        @unique
+  method    PaymentMethod
+  amount    Decimal
+  status    PaymentStatus @default(PENDING)
+  paidAt    DateTime?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+/// One review per order, so a trip cannot be rated twice.
+model Review {
+  id         String   @id @default(uuid())
+  orderId    String   @unique
+  customerId String
+  driverId   String
+  rating     Int
+  comment    String?
+  /// Tag apresiasi yang dipilih pelanggan, disimpan sebagai JSON array.
+  tags       String?
+  createdAt  DateTime @default(now())
+
+  order    Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customer User   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  driver   Driver @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@index([driverId])
+  @@index([customerId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// RodaPay balance. Every account owns exactly one wallet; it is created with the
+/// user at registration and topped up to Rp 100.000 as a welcome balance.
+model Wallet {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Decimal per spec; SQLite has no native DECIMAL so Prisma maps it to NUMERIC.
+  balance      Decimal @default(100000)
+  /// Saldo yang ditahan untuk proses pencairan (anti double-withdraw).
+  lockedBalance Decimal @default(0)
+  transactions WalletTransaction[]
+  withdrawals  WithdrawalRequest[]
+  updatedAt    DateTime @updatedAt
+}
+
+/// Append-only ledger of every balance movement. The wallet row is the running
+/// total; this table is the audit trail that explains how it got there.
+model WalletTransaction {
+  id      String   @id @default(uuid())
+  walletId String
+  wallet  Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  amount  Decimal
+  /// "TOPUP" credits the wallet, "PAYMENT" debits it. Always positive.
+  /// "EARNING" credits driver 80%, "WITHDRAWAL_LOCK"/"WITHDRAWAL_SUCCESS"/
+  /// "WITHDRAWAL_REFUND" track payout lifecycle.
+  type    String
+  description String
+  /// Idempotency reference: settlement/withdrawal yang sama tidak boleh
+  /// dieksekusi dua kali. Null untuk mutasi lama sebelum hardening.
+  txRef   String?  @unique
+  createdAt   DateTime @default(now())
+
+  @@index([walletId, createdAt])
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// Pengajuan pencairan dana mitra driver. Saldo dipindah balance ->
+/// lockedBalance saat PENDING, lalu dipotong permanen (APPROVED) atau
+/// dikembalikan (REJECTED) oleh admin.
+model WithdrawalRequest {
+  id            String           @id @default(cuid())
+  walletId      String
+  driverId      String
+  amount        Decimal
+  bankName      String
+  accountNumber String
+  accountName   String
+  status        WithdrawalStatus @default(PENDING)
+  note          String?
+  /// Idempotency reference unik per pengajuan.
+  txHash        String?          @unique
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  wallet        Wallet           @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([driverId])
+  @@index([status])
+}

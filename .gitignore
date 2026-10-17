@@ -15,7 +15,14 @@
 
 # next.js
 /.next/
+/.next-verify/
 /out/
+
+# local databases (dev + throwaway verification runs)
+/prisma/*.db
+/prisma/*.db-journal
+/prisma/*.db-wal
+/prisma/*.db-shm
 
 # production
 /build

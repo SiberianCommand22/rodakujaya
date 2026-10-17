@@ -3,24 +3,50 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "tsx watch server.ts",
     "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
+    "start": "tsx server.ts --prod",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "verify": "tsx --test tests/features.verify.test.ts",
+    "verify:e2e": "tsx --test tests/order-settlement.test.ts",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@prisma/adapter-better-sqlite3": "^7.10.0",
+    "@prisma/client": "^7.10.0",
+    "better-sqlite3": "^13.0.3",
+    "leaflet": "^1.9.4",
     "next": "16.4.0",
+    "qrcode": "^1.5.4",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "react-leaflet": "^5.0.0",
+    "socket.io": "^4.8.4",
+    "socket.io-client": "^4.8.4"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
-    "@types/node": "^20",
+    "@types/leaflet": "^1.9.22",
+    "@types/node": "^20.19.43",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
+    "prisma": "^7.10.0",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
+  },
+  "allowScripts": {
+    "prisma@7.10.0": true,
+    "@prisma/engines@7.10.0": true,
+    "esbuild@0.28.2": true,
+    "unrs-resolver@1.12.2": true,
+    "better-sqlite3@12.11.1": true,
+    "better-sqlite3@13.0.3": true
   }
 }
