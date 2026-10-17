@@ -32,5 +32,5 @@
     ".next-verify/types/**/*.ts",
     ".next-verify/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "tests", "server.ts", "prisma/seed.ts"]
 }
