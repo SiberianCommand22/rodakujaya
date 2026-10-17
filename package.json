@@ -15,9 +15,8 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
-    "@prisma/adapter-better-sqlite3": "^7.10.0",
+    "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.0",
-    "better-sqlite3": "^13.0.3",
     "leaflet": "^1.9.4",
     "next": "16.4.0",
     "qrcode": "^1.5.4",
@@ -45,8 +44,6 @@
     "prisma@7.10.0": true,
     "@prisma/engines@7.10.0": true,
     "esbuild@0.28.2": true,
-    "unrs-resolver@1.12.2": true,
-    "better-sqlite3@12.11.1": true,
-    "better-sqlite3@13.0.3": true
+    "unrs-resolver@1.12.2": true
   }
 }
