@@ -134,6 +134,8 @@ export default function HomeClient({
       routeSource: string | null;
       pickupAddress: string | null;
       dropoffAddress: string | null;
+      updatedAt: string;
+      customer: { name: string } | null;
       driver: {
         plateNumber: string;
         user: {
@@ -162,8 +164,10 @@ export default function HomeClient({
       accountNumber: order.driver?.user?.accountNumber ?? null,
       accountHolderName: order.driver?.user?.accountHolderName ?? null,
       paid: order.payment?.status === "PAID",
+      customerName: order.customer?.name ?? user?.name ?? null,
+      completedAt: order.status === "COMPLETED" ? order.updatedAt : null,
     }),
-    [],
+    [user?.name],
   );
 
   type CompletedOrderView = Parameters<typeof toSummary>[0];

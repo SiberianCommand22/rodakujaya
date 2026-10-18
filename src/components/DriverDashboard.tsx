@@ -48,6 +48,13 @@ type IncomingOrder = {
   createdAt?: string;
 };
 
+/** Full order details for "Hasil Pemesanan" receipt. */
+type OrderReceipt = IncomingOrder & {
+  updatedAt: string;
+  customer: { name: string } | null;
+  driver: { plateNumber: string; user: { name: string } } | null;
+};
+
 const TRIP_STEPS: { status: OrderStatus; label: string; hint: string }[] = [
   { status: "PICKING_UP", label: "Saya Sudah Tiba di Lokasi Jemput", hint: "Langkah 1 • Konfirmasi tiba" },
   { status: "ON_TRIP", label: "Mulai Perjalanan Bersama Pelanggan", hint: "Langkah 2 • Mulai argo" },
@@ -93,7 +100,7 @@ export default function DriverDashboard({
   const [toast, setToast] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(15);
   const [driverHeading, setDriverHeading] = useState<number>(0);
-  const [receipt, setReceipt] = useState<IncomingOrder | null>(null);
+  const [receipt, setReceipt] = useState<OrderReceipt | null>(null);
 
   const posRef = useRef<LatLng | null>(null);
   const activeRef = useRef<IncomingOrder | null>(null);
@@ -519,8 +526,36 @@ export default function DriverDashboard({
         });
 
         if (nextStatus === "COMPLETED") {
+          // Fetch full order details for receipt (customer name, updatedAt, driver info)
+          try {
+            const fullRes = await fetch(`/api/orders?limit=1`);
+            if (fullRes.ok) {
+              const fullData = await fullRes.json();
+              const completedOrder = (fullData.recent ?? []).find(
+                (o: { id: string }) => o.id === active.id,
+              );
+              if (completedOrder) {
+                setReceipt({
+                  ...active,
+                  updatedAt: completedOrder.updatedAt,
+                  customer: completedOrder.customer ?? null,
+                  driver: completedOrder.driver
+                    ? {
+                        plateNumber: completedOrder.driver.plateNumber,
+                        user: { name: completedOrder.driver.user?.name ?? "" },
+                      }
+                    : null,
+                });
+              } else {
+                setReceipt(active as OrderReceipt);
+              }
+            } else {
+              setReceipt(active as OrderReceipt);
+            }
+          } catch {
+            setReceipt(active as OrderReceipt);
+          }
           setToast("Perjalanan selesai. Tiba di tujuan.");
-          setReceipt(active);
           setActive(null);
           setStatus(null);
           setAvailable([]);
@@ -909,60 +944,135 @@ export default function DriverDashboard({
       </main>
 
 {receipt && (
-        <div className="fixed inset-0 z-[2000] flex items-end justify-center bg-[#0F172A]/70 p-4 backdrop-blur-sm sm:items-center">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="E-Receipt perjalanan selesai"
-            className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl"
-          >
-            <div className="flex items-center gap-3">
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-100">
-                <svg viewBox="0 0 24 24" className="h-6 w-6 text-emerald-600" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20 6 9 17l-5-5" />
-                </svg>
-              </span>
-              <div>
-                <p className="text-lg font-black text-[#0F172A]">Perjalanan Selesai</p>
-                <p className="text-xs font-semibold text-emerald-600">Tiba di tujuan • TIBA DI TUJUAN</p>
+        (() => {
+          const formatCompletionTime = (isoString?: string | null) => {
+            if (!isoString) return "-";
+            const date = new Date(isoString);
+            return date.toLocaleString("id-ID", {
+              day: "2-digit",
+              month: "2-digit",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+          };
+
+          return (
+            <div className="fixed inset-0 z-[2000] flex items-end justify-center bg-[#0F172A]/70 p-4 backdrop-blur-sm sm:items-center">
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-label="Hasil Pemesanan"
+                className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
+              >
+                {/* Header with PERJALANAN SELESAI badge */}
+                <div className="relative bg-emerald-600 px-6 py-5 text-white">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-100">
+                        PERJALANAN SELESAI
+                      </p>
+                      <h2 className="mt-1 text-2xl font-bold">Hasil Pemesanan</h2>
+                    </div>
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/20">
+                      <svg viewBox="0 0 24 24" className="h-6 w-6 text-white" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20 6 9 17l-5-5" />
+                      </svg>
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm text-emerald-100">
+                    #{receipt.id.slice(-8).toUpperCase()} · {formatCompletionTime(receipt.updatedAt)}
+                  </p>
+                </div>
+
+                {/* Trip Details */}
+                <div className="p-6 space-y-4">
+                  {/* Driver & Customer */}
+                  <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100">
+                          <svg viewBox="0 0 24 24" className="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" strokeWidth="2">
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="M12 8v4l2 2" />
+                          </svg>
+                        </span>
+                        <div>
+                          <p className="font-semibold text-[#0F172A]">{receipt.driver?.user?.name ?? user?.name ?? "Mitra Driver"}</p>
+                          <p className="text-xs text-slate-500">{receipt.driver?.plateNumber ?? user?.driver?.plateNumber ?? "-"}</p>
+                        </div>
+                      </div>
+                      {receipt.customer && (
+                        <div className="text-right">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Pelanggan</p>
+                          <p className="font-semibold text-[#0F172A]">{receipt.customer.name}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Route */}
+                  <div className="rounded-2xl border border-blue-100 bg-[#EFF6FF] px-4 py-3">
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100">
+                        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-blue-600" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0" />
+                          <circle cx="12" cy="10" r="3" />
+                        </svg>
+                      </span>
+                      <span className="font-semibold text-[#0F172A]">Jemput:</span>
+                      <span className="text-slate-600 flex-1 truncate">{receipt.pickupAddress ?? "-"}</span>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2 text-xs">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100">
+                        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-emerald-600" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M18.364 18.364A9 9 0 0 0 12 8a9 9 0 0 0-6.364 10.364" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                      </span>
+                      <span className="font-semibold text-[#0F172A]">Tujuan:</span>
+                      <span className="text-slate-600 flex-1 truncate">{receipt.dropoffAddress ?? "-"}</span>
+                    </div>
+                  </div>
+
+                  {/* Stats: Distance & Fare */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3 text-center">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Jarak</p>
+                      <p className="mt-1 text-2xl font-black text-[#0F172A] tabular-nums">{formatKm(receipt.distanceKm)}</p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3 text-center">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Total Tarif</p>
+                      <p className="mt-1 text-2xl font-black text-[#1D4ED8] tabular-nums">{formatIDR(receipt.fare)}</p>
+                    </div>
+                  </div>
+
+                  {/* Actions: Selesai / Pesan Kembali */}
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setReceipt(null)}
+                      className="flex-1 rounded-2xl border border-slate-200 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+                    >
+                      Selesai
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReceipt(null);
+                        // Refresh to get new orders
+                        window.location.reload();
+                      }}
+                      className="flex-1 rounded-2xl bg-[#1D4ED8] py-3 text-sm font-bold text-white shadow-xl transition hover:bg-[#1E40AF]"
+                    >
+                      Pesan Kembali
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-
-            <div className="mt-4 rounded-2xl border border-blue-100 bg-[#EFF6FF] px-4 py-3 text-sm">
-              <p className="text-slate-600">
-                <span className="font-semibold text-[#0F172A]">Jemput:</span>{" "}
-                {receipt.pickupAddress ?? "-"}
-              </p>
-              <p className="mt-1 text-slate-600">
-                <span className="font-semibold text-[#0F172A]">Tujuan:</span>{" "}
-                {receipt.dropoffAddress ?? "-"}
-              </p>
-            </div>
-
-            <dl className="mt-3 flex flex-col gap-2 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-slate-500">Jarak</dt>
-                <dd className="font-semibold text-[#0F172A]">{formatKm(receipt.distanceKm)}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-slate-500">Metode bayar</dt>
-                <dd className="font-semibold text-[#0F172A]">Tunai (auto-bayar simulasi)</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-slate-500">Pendapatan Anda (100%)</dt>
-                <dd className="text-lg font-black text-emerald-600">{formatIDR(receipt.fare)}</dd>
-              </div>
-            </dl>
-
-            <button
-              type="button"
-              onClick={() => setReceipt(null)}
-              className="mt-5 w-full rounded-2xl bg-[#1D4ED8] py-3 text-sm font-black text-white shadow-xl transition hover:bg-[#1E40AF]"
-            >
-              Tutup
-            </button>
-          </div>
-        </div>
+          );
+        })()
       )}
 
 <ChatDrawer

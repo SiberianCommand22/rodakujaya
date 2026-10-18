@@ -19,6 +19,7 @@ export default function ProfileClient({ initialUser }: ProfileClientProps) {
   const [accountHolderName, setAccountHolderName] = useState(
     initialUser.accountHolderName ?? "",
   );
+  const [plateNumber, setPlateNumber] = useState(initialUser.driver?.plateNumber ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -40,6 +41,7 @@ export default function ProfileClient({ initialUser }: ProfileClientProps) {
           bankName,
           accountNumber,
           accountHolderName,
+          ...(initialUser.driver ? { plateNumber } : {}),
         }),
       });
       const data = await res.json().catch(() => null);
@@ -111,6 +113,23 @@ export default function ProfileClient({ initialUser }: ProfileClientProps) {
             />
             {fieldErrors.name && <p className="text-[11px] text-red-600">{fieldErrors.name}</p>}
           </div>
+
+          {initialUser.driver && (
+            <div className="flex flex-col gap-1">
+              <label htmlFor="plateNumber" className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">
+                Plat Nomor Kendaraan
+              </label>
+              <input
+                id="plateNumber"
+                value={plateNumber}
+                onChange={(e) => setPlateNumber(e.target.value.toUpperCase())}
+                className={inputClass}
+                placeholder="B 1234 ABC"
+                autoComplete="off"
+              />
+              {fieldErrors.plateNumber && <p className="text-[11px] text-red-600">{fieldErrors.plateNumber}</p>}
+            </div>
+          )}
 
           <div className="flex flex-col gap-1">
             <label htmlFor="phone" className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">
@@ -194,8 +213,9 @@ export default function ProfileClient({ initialUser }: ProfileClientProps) {
         </form>
 
         <p className="mt-4 text-center text-[11px] leading-relaxed text-slate-500">
-          Rekening ini dipakai pelanggan untuk mentransfer tarif perjalanan
-          langsung (P2P) setelah perjalanan selesai.
+          {initialUser.driver
+            ? "Nama lengkap & plat nomor tampil di pesanan & struk pelanggan. Rekening untuk transfer P2P."
+            : "Rekening ini dipakai pelanggan untuk mentransfer tarif perjalanan langsung (P2P) setelah perjalanan selesai."}
         </p>
       </main>
     </div>

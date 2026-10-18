@@ -33,6 +33,10 @@ export type TripSummary = {
   accountHolderName?: string | null;
   /** True when payment is PAID — only the review step is outstanding. */
   paid?: boolean;
+  /** Customer name (for driver's receipt) */
+  customerName?: string | null;
+  /** Order completion timestamp (ISO string) */
+  completedAt?: string | null;
 };
 
 type Props = {
@@ -60,6 +64,10 @@ const SUCCESS_DELAY_MS = 900;
  * m-banking lalu menekan "Konfirmasi Pembayaran Diterima" → lunas → ulasan.
  *
  * Alur tunai: pelanggan menekan "Bayar Tunai" → order langsung COMPLETED.
+ *
+ * Alur baru (langsung COMPLETED): driver "Sudah Sampai Tujuan" → order COMPLETED
+ * + Payment CASH PAID otomatis → tampilkan "Hasil Pemesanan" (result view) di
+ * kedua sisi (driver & pelanggan via polling) tanpa tahap bayar/klaim/ulasan.
  */
 export default function TripSummaryModal({
   open,
@@ -223,6 +231,143 @@ export default function TripSummaryModal({
   const showSuccess = phase === "success";
   const reviewBusy = phase === "processing" || phase === "success";
 
+  // Format completion time
+  const formatCompletionTime = (isoString?: string | null) => {
+    if (!isoString) return "-";
+    const date = new Date(isoString);
+    return date.toLocaleString("id-ID", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  // Hasil Pemesanan (Result View) — shown when order is COMPLETED & paid
+  const showResultView = isPaid && summary.orderStatus === "COMPLETED";
+
+  if (showResultView) {
+    return (
+      <div className="fixed inset-0 z-[2200] flex items-center justify-center bg-[#0F172A]/70 p-4 backdrop-blur-sm">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Hasil Pemesanan"
+          className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
+        >
+          {/* Header with PERJALANAN SELESAI badge */}
+          <div className="relative bg-emerald-600 px-6 py-5 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-100">
+                  PERJALANAN SELESAI
+                </p>
+                <h2 className="mt-1 text-2xl font-bold">Hasil Pemesanan</h2>
+              </div>
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/20">
+                <svg viewBox="0 0 24 24" className="h-6 w-6 text-white" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+              </span>
+            </div>
+            <p className="mt-2 text-sm text-emerald-100">
+              #{summary.orderId.slice(-8).toUpperCase()} · {formatCompletionTime(summary.completedAt)}
+            </p>
+          </div>
+
+          {/* Trip Details */}
+          <div className="p-6 space-y-4">
+            {/* Driver & Customer */}
+            <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100">
+                    <svg viewBox="0 0 24 24" className="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <path d="M12 8v4l2 2" />
+                    </svg>
+                  </span>
+                  <div>
+                    <p className="font-semibold text-[#0F172A]">{summary.driverName ?? "Mitra Driver"}</p>
+                    <p className="text-xs text-slate-500">{summary.plateNumber ?? "-"}</p>
+                  </div>
+                </div>
+                {summary.customerName && (
+                  <div className="text-right">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Pelanggan</p>
+                    <p className="font-semibold text-[#0F172A]">{summary.customerName}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Route */}
+            <div className="rounded-2xl border border-blue-100 bg-[#EFF6FF] px-4 py-3">
+              <div className="flex items-center gap-2 text-xs">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100">
+                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-blue-600" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0" />
+                    <circle cx="12" cy="10" r="3" />
+                  </svg>
+                </span>
+                <span className="font-semibold text-[#0F172A]">Jemput:</span>
+                <span className="text-slate-600 flex-1 truncate">{summary.pickupAddress ?? "-"}</span>
+              </div>
+              <div className="mt-2 flex items-center gap-2 text-xs">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100">
+                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-emerald-600" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M18.364 18.364A9 9 0 0 0 12 8a9 9 0 0 0-6.364 10.364" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                </span>
+                <span className="font-semibold text-[#0F172A]">Tujuan:</span>
+                <span className="text-slate-600 flex-1 truncate">{summary.dropoffAddress ?? "-"}</span>
+              </div>
+            </div>
+
+            {/* Stats: Distance & Fare */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3 text-center">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Jarak</p>
+                <p className="mt-1 text-2xl font-black text-[#0F172A] tabular-nums">{summary.distanceKm.toFixed(2)} km</p>
+                {estimated && (
+                  <p className="mt-0.5 text-[10px] font-medium text-amber-600">(estimasi)</p>
+                )}
+              </div>
+              <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3 text-center">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Total Tarif</p>
+                <p className="mt-1 text-2xl font-black text-[#1D4ED8] tabular-nums">{formatIDR(summary.fare)}</p>
+              </div>
+            </div>
+
+            {/* Actions: Selesai / Pesan Kembali */}
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 rounded-2xl border border-slate-200 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+              >
+                Selesai
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  window.location.href = "/";
+                }}
+                className="flex-1 rounded-2xl bg-[#1D4ED8] py-3 text-sm font-bold text-white shadow-xl transition hover:bg-[#1E40AF]"
+              >
+                Pesan Kembali
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Legacy flow for AWAITING_PAYMENT (bank transfer) — keep for backward compat
   return (
     <div className="fixed inset-0 z-[2200] flex items-center justify-center bg-[#0F172A]/70 p-4 backdrop-blur-sm">
       <div
@@ -247,15 +392,6 @@ export default function TripSummaryModal({
             <span className="text-amber-700">
               {badge.total - badge.position + 1} tagihan menunggu
             </span>
-          </div>
-        )}
-
-        {isPaid && (
-          <div className="flex items-center justify-center gap-2 border-b border-emerald-100 bg-emerald-50 px-6 py-2.5 text-center text-xs font-black uppercase tracking-wide text-emerald-700">
-            <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 6 9 17l-5-5" />
-            </svg>
-            Perjalanan Selesai — Tiba di Tujuan
           </div>
         )}
 
@@ -360,7 +496,7 @@ export default function TripSummaryModal({
                 </p>
                 <p className="mt-1 text-[11px] leading-relaxed text-slate-600">
                   Transfer sejumlah tagihan ke rekening di bawah, lalu tekan
-                  &quot;Saya Sudah Transfer&quot;. Driver akan memverifikasi secara manual.
+                  "Saya Sudah Transfer". Driver akan memverifikasi secara manual.
                 </p>
                 <div className="mt-2.5 rounded-xl bg-white px-3 py-2.5 text-sm shadow-sm">
                   {hasBankDetails ? (

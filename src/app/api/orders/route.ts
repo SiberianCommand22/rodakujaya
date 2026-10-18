@@ -186,6 +186,9 @@ const ACTIVE_STATUSES = [
 ] as const;
 
 const ORDER_INCLUDE = {
+  customer: {
+    select: { name: true },
+  },
   driver: {
     include: {
       user: {
