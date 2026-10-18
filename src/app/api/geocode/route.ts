@@ -58,11 +58,11 @@ async function fetchUpstream(url: string): Promise<unknown | null> {
   }
 }
 
-// Bias geografis: Jabodetabek & Jawa Barat (Jakarta sebagai titik tengah).
-const JABAR_LAT = -6.2;
-const JABAR_LON = 106.8166;
-// Viewbox Nominatim: kiri,atas,kanan,bawah melingkupi Jakarta–Bogor–Bandung.
-const JABAR_VIEWBOX = "106.0,-5.9,108.3,-7.6";
+// Bias geografis: Kota/Kabupaten Bogor sebagai area simulasi.
+const JABAR_LAT = -6.5971;
+const JABAR_LON = 106.806;
+// Viewbox Nominatim: kiri,atas,kanan,bawah melingkupi Kota & Kabupaten Bogor.
+const JABAR_VIEWBOX = "106.60,-6.40,107.05,-6.80";
 
 async function searchPhoton(query: string): Promise<GeoSuggestion[]> {
   const biased = /\bindonesia\b/i.test(query) ? query : `${query}, Indonesia`;

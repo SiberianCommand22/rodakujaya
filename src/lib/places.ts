@@ -17,6 +17,23 @@ function p(label: string, address: string, lat: number, lng: number, extra = "")
 }
 
 export const POPULAR_PLACES_ID: PlaceEntry[] = [
+  // ── Kota Bogor (area simulasi utama) ──
+  p("Stasiun Bogor", "Stasiun Bogor, Bogor Tengah, Kota Bogor", -6.595, 106.79, "stasiun kereta bogor"),
+  p("Kebun Raya Bogor", "Kebun Raya Bogor, Bogor Tengah", -6.5986, 106.7997, "kebun raya krb istana bogor"),
+  p("Botani Square", "Botani Square, Bogor Tengah", -6.6019, 106.8067, "mall botani"),
+  p("Istana Bogor", "Istana Kepresidenan Bogor, Bogor Tengah", -6.5966, 106.8011, "istana presiden kebun raya"),
+  p("Taman Topi", "Taman Topi, Bogor Tengah, Kota Bogor", -6.5925, 106.7956, "taman topi alun alun"),
+  p("Terminal Bubulak", "Terminal Bubulak, Bogor Selatan", -6.5674, 106.7927, "terminal bubulak bus"),
+  p("RS Mitra Keluarga Bogor", "RS Mitra Keluarga Bogor, Bogor Utara", -6.5724, 106.8038, "rumah sakit bogor"),
+  p("Pasar Bogor", "Pasar Bogor, Bogor Tengah", -6.5943, 106.7934, "pasar bogor tradisional"),
+  p("Jl Pajajaran", "Jl. Pajajaran, Bogor Tengah", -6.5907, 106.7987, "jalan pajajaran bogor"),
+  p("Jl Soleh Iskandar", "Jl. Soleh Iskandar, Bogor Utara", -6.5583, 106.8014, "jalan soleh iskandar"),
+  p("Nasi Telor Keko Bogor", "Nasi Telor Keko, Bogor Tengah, Kota Bogor", -6.5975, 106.7975, "nasi telor keko kuliner bogor"),
+  p("Sekolah Tinggi Intelijen Negara", "STIN, Babakan Madang, Sentul, Bogor", -6.5219, 106.8536, "stin sekolah tinggi intelijen negara sentul bogor"),
+  p("Sentul City", "Sentul City, Babakan Madang, Kabupaten Bogor", -6.5937, 106.8531, "sentul city mall"),
+  p("Puncak", "Puncak, Cisarua, Kabupaten Bogor", -6.6958, 106.9841, "puncak pass ciawi cisarua"),
+  p("Cibinong", "Cibinong, Kabupaten Bogor", -6.4833, 106.85, "cibinong kabupaten bogor"),
+  p("Terminal Baranangsiang", "Terminal Baranangsiang, Bogor Timur", -6.5968, 106.8245, "terminal baranangsiang"),
   // ── Jakarta ──
   p("Monas", "Monumen Nasional, Gambir, Jakarta Pusat", -6.1754, 106.8272, "monumen nasional tugu"),
   p("Masjid Istiqlal", "Masjid Istiqlal, Sawah Besar, Jakarta Pusat", -6.1702, 106.8311, "masjid"),
@@ -44,14 +61,8 @@ export const POPULAR_PLACES_ID: PlaceEntry[] = [
   p("Jl Gatot Subroto", "Jl. Gatot Subroto, Jakarta Selatan", -6.235, 106.83, "jalan gatot subroto"),
   p("Bandara Soekarno-Hatta", "Bandara Soekarno-Hatta, Tangerang, Banten", -6.1256, 106.6559, "bandara soetta cengkareng terminal 1 2 3"),
   p("Bandara Halim", "Bandara Halim Perdanakusuma, Jakarta Timur", -6.2667, 106.8917, "bandara halim hlp"),
-  // ── Intelijen & Bogor favorit ──
-  p("Sekolah Tinggi Intelijen Negara", "STIN, Babakan Madang, Sentul, Bogor", -6.5219, 106.8536, "stin sekolah tinggi intelijen negara sentul bogor"),
   p("Badan Intelijen Negara", "BIN, Pejaten Timur, Pasar Minggu, Jakarta Selatan", -6.2777, 106.8477, "bin badan intelijen negara pejaten jakarta"),
-  p("Nasi Telor Keko Bogor", "Nasi Telor Keko, Bogor Tengah, Kota Bogor", -6.5975, 106.7975, "nasi telor keko kuliner bogor"),
-  // ── Bogor / Depok / Bekasi / Tangerang ──
-  p("Stasiun Bogor", "Stasiun Bogor, Bogor Tengah, Kota Bogor", -6.595, 106.79, "stasiun kereta bogor"),
-  p("Kebun Raya Bogor", "Kebun Raya Bogor, Bogor Tengah", -6.5986, 106.7997, "kebun raya krb istana bogor"),
-  p("Botani Square", "Botani Square, Bogor Tengah", -6.6019, 106.8067, "mall botani"),
+  // ── Depok / Bekasi / Tangerang ──
   p("Universitas Indonesia", "Universitas Indonesia, Beji, Depok", -6.3617, 106.8289, "kampus ui"),
   p("Stasiun Depok Baru", "Stasiun Depok Baru, Pancoran Mas, Depok", -6.39, 106.82, "stasiun kereta"),
   p("Stasiun Bekasi", "Stasiun Bekasi, Bekasi Timur", -6.2375, 106.9997, "stasiun kereta bekasi"),

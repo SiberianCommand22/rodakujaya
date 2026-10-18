@@ -250,6 +250,15 @@ export default function TripSummaryModal({
           </div>
         )}
 
+        {isPaid && (
+          <div className="flex items-center justify-center gap-2 border-b border-emerald-100 bg-emerald-50 px-6 py-2.5 text-center text-xs font-black uppercase tracking-wide text-emerald-700">
+            <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+            Perjalanan Selesai — Tiba di Tujuan
+          </div>
+        )}
+
         {showSuccess ? (
           <div className="flex flex-col items-center gap-4 px-6 py-12">
             <span className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100">

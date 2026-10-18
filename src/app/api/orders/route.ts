@@ -9,6 +9,7 @@ import {
 } from "@/lib/utils";
 import { fareForRoute, getRoute } from "@/lib/routing";
 import { applyPromo, normalizePromoCode } from "@/lib/promo";
+import { completeCashOrder } from "@/lib/settlement";
 
 const MAX_ADDRESS_LENGTH = 200;
 const MAX_PRICE = 10_000_000;
@@ -378,6 +379,11 @@ export async function PATCH(request: Request) {
       ...(status === "ACCEPTED" ? { driverId: user.driver.id } : {}),
     },
   });
+
+  // Simulasi tanpa tahap bayar: saat driver menandai COMPLETED, Payment CASH PAID dibuat otomatis.
+  if (status === "COMPLETED") {
+    await completeCashOrder(orderId);
+  }
 
   return NextResponse.json({ order });
 }

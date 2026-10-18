@@ -1,70 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import RodakuLogo from "@/components/RodakuLogo";
-import { INDONESIAN_BANKS } from "@/lib/walletContract";
-
-function GoogleGIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden>
-      <path
-        fill="#4285F4"
-        d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"
-      />
-      <path
-        fill="#34A853"
-        d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.26 21.3 7.31 24 12 24z"
-      />
-      <path
-        fill="#FBBC05"
-        d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09z"
-      />
-      <path
-        fill="#EA4335"
-        d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.98 3.09C6.22 6.86 8.87 4.75 12 4.75z"
-      />
-    </svg>
-  );
-}
-
-type GoogleDemoProfile = { name: string; email: string; googleId: string; avatar: string };
-
-const GOOGLE_DEMO_PROFILES: GoogleDemoProfile[] = [
-  {
-    name: "Budi Santoso",
-    email: "budi.santoso.demo@gmail.com",
-    googleId: "demo-google-uid-budi-001",
-    avatar: "https://i.pravatar.cc/100?img=12",
-  },
-  {
-    name: "Siti Rahayu",
-    email: "siti.rahayu.demo@gmail.com",
-    googleId: "demo-google-uid-siti-002",
-    avatar: "https://i.pravatar.cc/100?img=47",
-  },
-  {
-    name: "Andi Pratama",
-    email: "andi.pratama.demo@gmail.com",
-    googleId: "demo-google-uid-andi-003",
-    avatar: "https://i.pravatar.cc/100?img=59",
-  },
-];
-
-const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
-
-declare global {
-  interface Window {
-    google?: {
-      accounts?: {
-        id?: {
-          initialize: (config: Record<string, unknown>) => void;
-          prompt: () => void;
-        };
-      };
-    };
-  }
-}
 
 export type AuthUser = {
   id: string;
@@ -132,9 +70,6 @@ export default function AuthPanel({ onAuthenticated, initialRole }: AuthPanelPro
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const [googleBusy, setGoogleBusy] = useState(false);
-  const [googlePickerOpen, setGooglePickerOpen] = useState(false);
-  const gisLoaded = useRef(false);
 
   function update(key: keyof typeof EMPTY, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -190,126 +125,6 @@ export default function AuthPanel({ onAuthenticated, initialRole }: AuthPanelPro
       setBusy(false);
     }
   }
-
-  const handleGoogleProfile = useCallback(
-    async (profile: GoogleDemoProfile | { email: string; name: string; googleId?: string; avatar?: string }) => {
-      setGoogleBusy(true);
-      setError(null);
-      try {
-        const res = await fetch("/api/auth/google", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: profile.email,
-            name: profile.name,
-            googleId: "googleId" in profile ? (profile.googleId ?? null) : null,
-            avatar: "avatar" in profile ? ((profile as { avatar?: string }).avatar ?? null) : null,
-          }),
-        });
-        const data = await res.json().catch(() => null);
-        if (!res.ok) {
-          setError(data?.message ?? data?.error ?? "Gagal masuk dengan Google");
-          return;
-        }
-        const user = data.user as AuthUser;
-        if (user.role === "ADMIN") {
-          try {
-            await fetch("/api/auth/logout", { method: "POST" });
-          } catch {
-            /* abaikan */
-          }
-          setError("Akun ini tidak dapat digunakan di sini.");
-          return;
-        }
-        setGooglePickerOpen(false);
-        onAuthenticated(user);
-        if (user.role === "DRIVER") {
-          router.push("/driver");
-        }
-      } catch {
-        setError("Tidak dapat terhubung ke server");
-      } finally {
-        setGoogleBusy(false);
-      }
-    },
-    [onAuthenticated, router],
-  );
-
-  const handleGoogleCredential = useCallback(
-    async (credential: string) => {
-      setGoogleBusy(true);
-      setError(null);
-      try {
-        const res = await fetch("/api/auth/google", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ credential }),
-        });
-        const data = await res.json().catch(() => null);
-        if (!res.ok) {
-          setError(data?.message ?? data?.error ?? "Gagal masuk dengan Google");
-          return;
-        }
-        const user = data.user as AuthUser;
-        if (user.role === "ADMIN") {
-          try {
-            await fetch("/api/auth/logout", { method: "POST" });
-          } catch {
-            /* abaikan */
-          }
-          setError("Akun ini tidak dapat digunakan di sini.");
-          return;
-        }
-        setGooglePickerOpen(false);
-        onAuthenticated(user);
-        if (user.role === "DRIVER") {
-          router.push("/driver");
-        }
-      } catch {
-        setError("Tidak dapat terhubung ke server");
-      } finally {
-        setGoogleBusy(false);
-      }
-    },
-    [onAuthenticated, router],
-  );
-
-  // Google Identity Services: muat sekali bila CLIENT_ID tersedia, lalu
-  // panggil One Tap saat dialog demo dibuka.
-  useEffect(() => {
-    if (!googlePickerOpen || !GOOGLE_CLIENT_ID || gisLoaded.current) return;
-    if (typeof window === "undefined") return;
-    if (window.google?.accounts?.id) {
-      gisLoaded.current = true;
-      window.google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: (response: { credential?: string }) => {
-          if (response?.credential) void handleGoogleCredential(response.credential);
-        },
-      });
-      window.google.accounts.id.prompt();
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = "https://accounts.google.com/gsi/client";
-    script.async = true;
-    script.defer = true;
-    script.onload = () => {
-      gisLoaded.current = true;
-      try {
-        window.google?.accounts?.id?.initialize({
-          client_id: GOOGLE_CLIENT_ID,
-          callback: (response: { credential?: string }) => {
-            if (response?.credential) void handleGoogleCredential(response.credential);
-          },
-        });
-        window.google?.accounts?.id?.prompt();
-      } catch {
-        /* GIS opsional — fallback demo tetap tersedia */
-      }
-    };
-    document.head.appendChild(script);
-  }, [googlePickerOpen, handleGoogleCredential]);
 
   const field = (key: keyof typeof EMPTY, label: string, extra?: React.ReactNode) => (
     <div className="flex flex-col gap-1">
@@ -412,68 +227,6 @@ export default function AuthPanel({ onAuthenticated, initialRole }: AuthPanelPro
                 className="rounded-xl border border-blue-100 bg-white px-3 py-2 text-sm outline-none focus:border-[#1D4ED8] focus:ring-2 focus:ring-[#1D4ED8]/20"
               />
             ))}
-            {/* Data rekening bank — wajib untuk alur pembayaran P2P */}
-            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3">
-              <p className="mb-2 text-[11px] font-black uppercase tracking-wide text-emerald-700">
-                🏦 Rekening Bank
-              </p>
-              <p className="mb-2 text-[11px] text-emerald-800/70">
-                {roleTab === "DRIVER"
-                  ? "Pelanggan akan mentransfer langsung ke rekening ini setelah perjalanan."
-                  : "Rekening Anda untuk menerima refund / pencairan bila diperlukan."}
-              </p>
-              <div className="mb-2 flex flex-col gap-1">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
-                  Nama Bank
-                </span>
-                <select
-                  value={form.bankName}
-                  onChange={(e) => update("bankName", e.target.value)}
-                  className="rounded-xl border border-emerald-100 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20"
-                >
-                  <option value="">Pilih bank…</option>
-                  {INDONESIAN_BANKS.map((b) => (
-                    <option key={b} value={b}>
-                      {b}
-                    </option>
-                  ))}
-                </select>
-                {fieldErrors.bankName && (
-                  <span className="text-[11px] text-red-600">{fieldErrors.bankName}</span>
-                )}
-              </div>
-              <div className="mb-2 flex flex-col gap-1">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
-                  Nomor Rekening
-                </span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="1234567890"
-                  value={form.accountNumber}
-                  onChange={(e) => update("accountNumber", e.target.value.replace(/\D/g, ""))}
-                  className="rounded-xl border border-emerald-100 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20"
-                />
-                {fieldErrors.accountNumber && (
-                  <span className="text-[11px] text-red-600">{fieldErrors.accountNumber}</span>
-                )}
-              </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
-                  Nama Pemilik Rekening
-                </span>
-                <input
-                  type="text"
-                  placeholder="Sesuai buku tabungan"
-                  value={form.accountHolderName}
-                  onChange={(e) => update("accountHolderName", e.target.value)}
-                  className="rounded-xl border border-emerald-100 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20"
-                />
-                {fieldErrors.accountHolderName && (
-                  <span className="text-[11px] text-red-600">{fieldErrors.accountHolderName}</span>
-                )}
-              </div>
-            </div>
             {roleTab === "DRIVER" && (
               <div className="rounded-2xl border border-blue-100 bg-[#EFF6FF]/60 p-3">
                 <p className="mb-2 text-[11px] font-black uppercase tracking-wide text-[#1D4ED8]">
@@ -576,136 +329,13 @@ export default function AuthPanel({ onAuthenticated, initialRole }: AuthPanelPro
                 ? "Daftar sebagai Mitra Driver"
                 : "Daftar Sekarang"}
         </button>
-
-        {mode === "login" && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => {
-              setForm((prev) => ({
-                ...prev,
-                email: roleTab === "DRIVER" ? "vision1337@gmail.com" : "gendengsekali1337@gmail.com",
-                password: roleTab === "DRIVER" ? "jayaselaluvision21" : "gendengkowerika1337",
-              }));
-              setError(null);
-              setFieldErrors({});
-            }}
-            className="rounded-2xl border-2 border-dashed border-[#1D4ED8]/30 bg-[#EFF6FF]/60 py-2.5 text-xs font-black text-[#1D4ED8] transition hover:border-[#1D4ED8] hover:bg-[#EFF6FF] disabled:opacity-60"
-          >
-            ⚡ Isi Akun Demo 1-Klik (
-            {roleTab === "DRIVER" ? "vision1337@gmail.com" : "gendengsekali1337@gmail.com"})
-          </button>
-        )}
       </form>
-
-      {roleTab === "CUSTOMER" && (
-        <>
-          {/* Pemisah elegan */}
-          <div className="flex items-center gap-3" aria-hidden>
-            <span className="h-px flex-1 bg-slate-200" />
-            <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
-              atau lanjutkan dengan
-            </span>
-            <span className="h-px flex-1 bg-slate-200" />
-          </div>
-
-          {/* Tombol standar Google */}
-          <button
-            type="button"
-            disabled={googleBusy}
-            onClick={() => {
-              setError(null);
-              setGooglePickerOpen(true);
-            }}
-            className="flex w-full items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white py-3 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-60"
-          >
-            <GoogleGIcon />
-            {googleBusy ? "Menghubungkan ke Google..." : "Masuk dengan Google"}
-          </button>
-        </>
-      )}
 
       <p className="text-center text-[11px] leading-relaxed text-slate-400">
         {roleTab === "DRIVER"
           ? "Mitra driver yang masuk akan otomatis diarahkan ke konsol driver."
           : "Pelanggan yang masuk langsung bisa memesan perjalanan."}
       </p>
-
-      {/* Dialog pilihan akun Google — instan untuk localhost, GIS bila tersedia */}
-      {googlePickerOpen && (
-        <div
-          className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Pilih akun Google"
-          onClick={() => {
-            if (!googleBusy) setGooglePickerOpen(false);
-          }}
-        >
-          <div
-            className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center gap-3">
-              <GoogleGIcon />
-              <div>
-                <h2 className="text-base font-black tracking-tight text-[#0F172A]">
-                  Pilih akun Google
-                </h2>
-                <p className="text-xs text-slate-500">
-                  {GOOGLE_CLIENT_ID
-                    ? "Login Google asli via Identity Services, atau akun demo instan."
-                    : "Mode localhost — pilih akun demo instan untuk pengetesan."}
-                </p>
-              </div>
-              <button
-                type="button"
-                aria-label="Tutup"
-                disabled={googleBusy}
-                onClick={() => setGooglePickerOpen(false)}
-                className="ml-auto flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition hover:bg-slate-200"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="mt-4 flex flex-col gap-2">
-              {GOOGLE_DEMO_PROFILES.map((profile) => (
-                <button
-                  key={profile.googleId}
-                  type="button"
-                  disabled={googleBusy}
-                  onClick={() => void handleGoogleProfile(profile)}
-                  className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-left transition hover:border-[#1D4ED8]/40 hover:bg-[#EFF6FF]/50 disabled:opacity-60"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={profile.avatar}
-                    alt=""
-                    width={36}
-                    height={36}
-                    className="h-9 w-9 rounded-full bg-slate-100 object-cover"
-                  />
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-bold text-[#0F172A]">
-                      {profile.name}
-                    </span>
-                    <span className="block truncate text-xs text-slate-500">
-                      {profile.email}
-                    </span>
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            <p className="mt-3 text-center text-[11px] leading-relaxed text-slate-400">
-              {GOOGLE_CLIENT_ID
-                ? "One Tap Google akan muncul otomatis. Akun demo hanya untuk localhost."
-                : "Isi NEXT_PUBLIC_GOOGLE_CLIENT_ID di environment untuk login Google asli (GIS)."}
-            </p>
-          </div>
-        </div>
-      )}
     </section>
   );
 }

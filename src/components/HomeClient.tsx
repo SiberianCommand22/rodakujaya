@@ -33,8 +33,6 @@ const Map = dynamic(() => import("@/components/Map"), {
 
 type DriverCard = { name: string; plateNumber: string; rating: number; vehicleLabel: string };
 
-const NAV_LINKS = [{ href: "#beranda", label: "Beranda" }] as const;
-
 export default function HomeClient({
   initialUser,
 }: {
@@ -782,17 +780,6 @@ export default function HomeClient({
           >
             <RodakuLogo size="md" variant="dark" />
           </a>
-          <nav className="ml-6 hidden items-center gap-1 md:flex" aria-label="Navigasi utama">
-            {NAV_LINKS.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                className="px-4 py-2 rounded-full text-sm font-semibold text-slate-600 hover:text-[#1D4ED8] hover:bg-blue-50/80 transition-all"
-              >
-                {link.label}
-              </a>
-            ))}
-          </nav>
           <div className="ml-auto flex items-center gap-2">
             {!user ? (
               <button

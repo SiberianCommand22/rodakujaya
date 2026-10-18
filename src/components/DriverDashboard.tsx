@@ -51,10 +51,10 @@ type IncomingOrder = {
 const TRIP_STEPS: { status: OrderStatus; label: string; hint: string }[] = [
   { status: "PICKING_UP", label: "Saya Sudah Tiba di Lokasi Jemput", hint: "Langkah 1 • Konfirmasi tiba" },
   { status: "ON_TRIP", label: "Mulai Perjalanan Bersama Pelanggan", hint: "Langkah 2 • Mulai argo" },
-  { status: "AWAITING_PAYMENT", label: "Selesaikan Perjalanan", hint: "Langkah 3 • Akhiri perjalanan" },
+  { status: "COMPLETED", label: "Sudah Sampai Tujuan", hint: "Langkah 3 • Akhiri perjalanan" },
 ];
 
-const STEP_ORDER: OrderStatus[] = ["ACCEPTED", "PICKING_UP", "ON_TRIP", "AWAITING_PAYMENT", "COMPLETED"];
+const STEP_ORDER: OrderStatus[] = ["ACCEPTED", "PICKING_UP", "ON_TRIP", "COMPLETED"];
 
 function stepIndex(status: OrderStatus | null): number {
   if (!status) return -1;
@@ -92,9 +92,8 @@ export default function DriverDashboard({
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(15);
-  const [paymentClaimed, setPaymentClaimed] = useState(false);
-  const [confirmBusy, setConfirmBusy] = useState(false);
   const [driverHeading, setDriverHeading] = useState<number>(0);
+  const [receipt, setReceipt] = useState<IncomingOrder | null>(null);
 
   const posRef = useRef<LatLng | null>(null);
   const activeRef = useRef<IncomingOrder | null>(null);
@@ -149,8 +148,6 @@ export default function DriverDashboard({
 
         setActive(data.order);
         setStatus(data.order.status);
-        // Recover the P2P payment-claim flag after a refresh.
-        setPaymentClaimed(data.order.payment?.status === "CLAIMED");
 
         // Place the marker on the last fix persisted in SQLite, so the map is
         // correct until live telemetry resumes.
@@ -211,23 +208,6 @@ export default function DriverDashboard({
       socket.off(SOCKET_EVENTS.ORDER_CREATED, onOrderNew);
     };
   }, [online, soundOn]);
-
-  // P2P: pelanggan mengklaim transfer bank → aktifkan tombol konfirmasi.
-  useEffect(() => {
-    const socket = getSocket();
-    if (!socket.connected) socket.connect();
-
-    const onPaymentClaimed = (payload: { orderId: string; amount?: number }) => {
-      if (!active || payload.orderId !== active.id) return;
-      setPaymentClaimed(true);
-      setToast("Pelanggan sudah mentransfer. Periksa m-banking Anda, lalu konfirmasi.");
-    };
-
-    socket.on(SOCKET_EVENTS.PAYMENT_CLAIMED, onPaymentClaimed);
-    return () => {
-      socket.off(SOCKET_EVENTS.PAYMENT_CLAIMED, onPaymentClaimed);
-    };
-  }, [active]);
 
   // Jaring pengaman Socket.io: polling daftar SEARCHING tiap 3 detik saat
   // online & tanpa order aktif, agar pesanan 100% muncul (anti-nyangkut).
@@ -538,19 +518,12 @@ export default function DriverDashboard({
           plateNumber: user?.driver?.plateNumber ?? null,
         });
 
-        if (nextStatus === "AWAITING_PAYMENT") {
-          setToast(
-            "Perjalanan selesai. Menunggu pelanggan melakukan transfer bank.",
-          );
-          setPaymentClaimed(false);
-        }
-
         if (nextStatus === "COMPLETED") {
-          setToast("Pembayaran diterima. Terima kasih!");
+          setToast("Perjalanan selesai. Tiba di tujuan.");
+          setReceipt(active);
           setActive(null);
           setStatus(null);
           setAvailable([]);
-          setPaymentClaimed(false);
           posRef.current = null;
           setSelfPoint(null);
           setGpsAccuracy(null);
@@ -561,43 +534,6 @@ export default function DriverDashboard({
     },
     [active, user],
   );
-
-  /** Driver confirms the P2P bank transfer was received in their m-banking. */
-  const confirmPayment = useCallback(async () => {
-    if (!active || confirmBusy) return;
-    setConfirmBusy(true);
-    try {
-      const res = await fetch(`/api/orders/${active.id}/confirm-payment`, {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message ?? "Gagal konfirmasi pembayaran");
-
-      getSocket().emit(SOCKET_EVENTS.ORDER_STATUS_UPDATE, {
-        orderId: active.id,
-        status: "COMPLETED",
-        driverId: user?.driver?.id ?? null,
-        plateNumber: user?.driver?.plateNumber ?? null,
-      });
-      getSocket().emit(SOCKET_EVENTS.PAYMENT_SETTLED, {
-        orderId: active.id,
-        amount: active.fare,
-      });
-
-      setToast("Pembayaran diterima. Perjalanan selesai.");
-      setActive(null);
-      setStatus(null);
-      setAvailable([]);
-      setPaymentClaimed(false);
-      posRef.current = null;
-      setSelfPoint(null);
-      setGpsAccuracy(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal konfirmasi pembayaran");
-    } finally {
-      setConfirmBusy(false);
-    }
-  }, [active, confirmBusy, user]);
 
   async function claimOrder(order: IncomingOrder) {
     stopOrderAlert();
@@ -615,7 +551,6 @@ export default function DriverDashboard({
 
       setActive(order);
       setStatus("ACCEPTED");
-      setPaymentClaimed(false);
       setIncoming((prev) => (prev?.id === order.id ? null : prev));
       setAvailable((prev) => prev.filter((o) => o.id !== order.id));
       // Tempatkan kendaraan 400–800 m dari titik jemput agar Auto-Drive
@@ -929,7 +864,7 @@ export default function DriverDashboard({
                   const isNext =
                     (status === "ACCEPTED" && step.status === "PICKING_UP") ||
                     (status === "PICKING_UP" && step.status === "ON_TRIP") ||
-                    (status === "ON_TRIP" && step.status === "AWAITING_PAYMENT");
+                    (status === "ON_TRIP" && step.status === "COMPLETED");
                   return (
                     <button
                       key={step.status}
@@ -949,34 +884,8 @@ export default function DriverDashboard({
                   );
                 })}
 
-                {/* Konfirmasi pembayaran P2P (transfer bank) */}
-                {status === "AWAITING_PAYMENT" && (
-                  <div className="mt-2 rounded-2xl bg-amber-50 p-4 text-sm">
-                    {paymentClaimed ? (
-                      <>
-                        <p className="text-xs font-semibold text-amber-800">
-                          💰 Pelanggan sudah mentransfer <strong>{formatIDR(active.fare)}</strong>.
-                          Periksa mutasi m-banking Anda, lalu konfirmasi.
-                        </p>
-                        <button
-                          type="button"
-                          disabled={confirmBusy}
-                          onClick={() => void confirmPayment()}
-                          className="mt-3 w-full rounded-2xl bg-emerald-600 py-3 text-sm font-black text-white shadow-xl transition hover:bg-emerald-700 disabled:opacity-60"
-                        >
-                          {confirmBusy ? "Memproses…" : "Konfirmasi Pembayaran Diterima"}
-                        </button>
-                      </>
-                    ) : (
-                      <p className="text-xs text-amber-800">
-                        Menunggu pelanggan mentransfer ke rekening Anda…
-                      </p>
-                    )}
-                  </div>
-                )}
-
                 <p className="text-center text-[10px] text-slate-400">
-                  Selesaikan langkah berurutan: tiba → mulai perjalanan → selesaikan perjalanan.
+                  Selesaikan langkah berurutan: tiba → mulai perjalanan → sudah sampai tujuan.
                 </p>
               </div>
             </div>
@@ -998,6 +907,63 @@ export default function DriverDashboard({
           />
         </div>
       </main>
+
+{receipt && (
+        <div className="fixed inset-0 z-[2000] flex items-end justify-center bg-[#0F172A]/70 p-4 backdrop-blur-sm sm:items-center">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="E-Receipt perjalanan selesai"
+            className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl"
+          >
+            <div className="flex items-center gap-3">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-100">
+                <svg viewBox="0 0 24 24" className="h-6 w-6 text-emerald-600" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+              </span>
+              <div>
+                <p className="text-lg font-black text-[#0F172A]">Perjalanan Selesai</p>
+                <p className="text-xs font-semibold text-emerald-600">Tiba di tujuan • TIBA DI TUJUAN</p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-blue-100 bg-[#EFF6FF] px-4 py-3 text-sm">
+              <p className="text-slate-600">
+                <span className="font-semibold text-[#0F172A]">Jemput:</span>{" "}
+                {receipt.pickupAddress ?? "-"}
+              </p>
+              <p className="mt-1 text-slate-600">
+                <span className="font-semibold text-[#0F172A]">Tujuan:</span>{" "}
+                {receipt.dropoffAddress ?? "-"}
+              </p>
+            </div>
+
+            <dl className="mt-3 flex flex-col gap-2 text-sm">
+              <div className="flex justify-between">
+                <dt className="text-slate-500">Jarak</dt>
+                <dd className="font-semibold text-[#0F172A]">{formatKm(receipt.distanceKm)}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-slate-500">Metode bayar</dt>
+                <dd className="font-semibold text-[#0F172A]">Tunai (auto-bayar simulasi)</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-slate-500">Pendapatan Anda (100%)</dt>
+                <dd className="text-lg font-black text-emerald-600">{formatIDR(receipt.fare)}</dd>
+              </div>
+            </dl>
+
+            <button
+              type="button"
+              onClick={() => setReceipt(null)}
+              className="mt-5 w-full rounded-2xl bg-[#1D4ED8] py-3 text-sm font-black text-white shadow-xl transition hover:bg-[#1E40AF]"
+            >
+              Tutup
+            </button>
+          </div>
+        </div>
+      )}
 
 <ChatDrawer
  key={active?.id ?? "chat-none"}

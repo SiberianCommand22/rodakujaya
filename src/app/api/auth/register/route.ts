@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     const vehicleType = raw.vehicleType === "RODA_MOBIL" ? "RODA_MOBIL" : "RODA_MOTOR";
     const vehicleBrand = readString(raw.vehicleBrand, 60);
 
-    // Rekening bank untuk menerima transfer P2P — wajib untuk semua role.
+    // Rekening bank — opsional (simulasi auto-CASH, tanpa transfer bank).
     const bankName = readString(raw.bankName, 60);
     const accountNumber = readString(raw.accountNumber, 20);
     const accountHolderName = readString(raw.accountHolderName, 100);
@@ -64,11 +64,13 @@ export async function POST(request: Request) {
     if (!phone || !PHONE_RE.test(phone.replace(/[\s-]/g, "")))
       errors.phone = "Nomor telepon Indonesia tidak valid (contoh: 081234567890).";
     if (password.length < 8) errors.password = "Password minimal 8 karakter.";
-    if (!bankName || !(INDONESIAN_BANKS as readonly string[]).includes(bankName))
+    // Validasi bank hanya bila diisi (opsional untuk simulasi).
+    if (bankName && !(INDONESIAN_BANKS as readonly string[]).includes(bankName))
       errors.bankName = "Pilih nama bank dari daftar.";
-    if (!accountNumber || !ACCOUNT_NUMBER_RE.test(accountNumber.replace(/[\s-]/g, "")))
+    if (accountNumber && !ACCOUNT_NUMBER_RE.test(accountNumber.replace(/[\s-]/g, "")))
       errors.accountNumber = "Nomor rekening 6–20 digit angka.";
-    if (!accountHolderName) errors.accountHolderName = "Nama pemilik rekening wajib diisi.";
+    if (accountNumber && !accountHolderName)
+      errors.accountHolderName = "Nama pemilik rekening wajib diisi jika mengisi nomor rekening.";
     if (role === "DRIVER") {
       if (!vehiclePlate || !isValidPlateNumber(vehiclePlate))
         errors.vehiclePlate =
@@ -102,9 +104,9 @@ export async function POST(request: Request) {
           phone,
           password: hashPassword(password),
           role,
-          bankName: bankName!,
-          accountNumber: accountNumber!.replace(/[\s-]/g, ""),
-          accountHolderName: accountHolderName!,
+          bankName: bankName,
+          accountNumber: accountNumber?.replace(/[\s-]/g, "") ?? null,
+          accountHolderName: accountHolderName,
         },
       });
 

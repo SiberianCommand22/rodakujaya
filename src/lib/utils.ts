@@ -95,13 +95,13 @@ export const ORDER_STATUS_META: Record<
 export const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
   ACCEPTED: "PICKING_UP",
   PICKING_UP: "ON_TRIP",
-  ON_TRIP: "AWAITING_PAYMENT",
+  ON_TRIP: "COMPLETED",
 };
 
-/** Pusat awal peta: Jakarta sebagai titik tengah Jabodetabek & Jawa Barat. */
-export const DEFAULT_CENTER: LatLng = { lat: -6.2, lng: 106.8166 };
-/** Zoom awal 11: Jakarta, Depok, Bogor, Tangerang, Bekasi hingga Bandung Raya proporsional. */
-export const DEFAULT_ZOOM = 11;
+/** Pusat awal peta: Kota Bogor sebagai area simulasi. */
+export const DEFAULT_CENTER: LatLng = { lat: -6.5971, lng: 106.806 };
+/** Zoom awal 13: Kota/Kabupaten Bogor proporsional. */
+export const DEFAULT_ZOOM = 13;
 
 const AVERAGE_SPEED_KMH: Record<VehicleType, number> = {
   RODA_MOTOR: 22,
