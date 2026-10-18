@@ -255,14 +255,28 @@ async function main() {
       );
     });
 
-    // Settlement broadcast: setelah /api/payment/qris/verify atau /webhook
-    // mengembalikan 200, pengirim meneruskan event ini agar pelanggan dan
-    // driver di room tracking:{orderId} menerima konfirmasi lunas real-time.
+    // Payment claim broadcast: setelah customer menekan "Saya Sudah Transfer"
+    // (/api/orders/[id]/pay BANK_TRANSFER → CLAIMED), client meneruskan event
+    // ini agar driver di room tracking:{orderId} menerima notifikasi real-time.
     socket.on("payment:settled", (payload: unknown) => {
       const data = payload as { orderId?: unknown; amount?: unknown } | null;
       const orderId = typeof data?.orderId === "string" ? data.orderId : null;
       if (!orderId) return;
       io.to(`tracking:${orderId}`).emit("payment:settled", {
+        orderId,
+        ...(typeof data?.amount === "number" && Number.isFinite(data.amount)
+          ? { amount: data.amount }
+          : {}),
+      });
+    });
+
+    // Customer claims a P2P bank transfer ("Saya Sudah Transfer"). Fan out to
+    // the tracking room so the driver console can enable the confirm button.
+    socket.on("payment:claimed", (payload: unknown) => {
+      const data = payload as { orderId?: unknown; amount?: unknown } | null;
+      const orderId = typeof data?.orderId === "string" ? data.orderId : null;
+      if (!orderId) return;
+      io.to(`tracking:${orderId}`).emit("payment:claimed", {
         orderId,
         ...(typeof data?.amount === "number" && Number.isFinite(data.amount)
           ? { amount: data.amount }

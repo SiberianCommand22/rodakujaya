@@ -25,8 +25,8 @@ const COPY = {
       "Akun Anda terdaftar sebagai Pelanggan. Silakan gunakan akun Mitra Driver.",
     quickFill: { email: "vision1337@gmail.com", password: "jayaselaluvision21", label: "Isi Akun Driver Bawaan (1-Klik)" },
     stats: [
-      { value: "80%", label: "Bagi hasil driver" },
-      { value: "QRIS", label: "Bayaran instan" },
+      { value: "100%", label: "Tarif ke driver" },
+      { value: "Transfer", label: "Bayaran bank" },
       { value: "24/7", label: "Order real-time" },
     ],
   },
@@ -40,9 +40,9 @@ const COPY = {
     customerDenied: "Akses ditolak.",
     quickFill: { email: "siberiantwotwo@gmail.com", password: "siberianniboss1337", label: "Isi Akun Admin Bawaan (1-Klik)" },
     stats: [
-      { value: "20%", label: "Komisi platform" },
+      { value: "0%", label: "Komisi platform" },
       { value: "Live", label: "Fleet monitoring" },
-      { value: "✓", label: "Approval payout" },
+      { value: "✓", label: "Verifikasi pembayaran" },
     ],
   },
 } as const;
@@ -237,7 +237,7 @@ export default function PortalLogin({
             ))}
           </div>
           <p className="text-[11px] text-blue-200">
-            💰 Setiap QRIS lunas → 80% otomatis masuk dompet Anda detik itu juga.
+            💰 Setiap perjalanan lunas → 100% tarif masuk ke rekening bank Anda.
           </p>
         </div>
         {/* Kartu login glassmorphism */}

@@ -33,6 +33,9 @@ export type SessionUser = {
   phone: string | null;
   googleId: string | null;
   avatar: string | null;
+  bankName: string | null;
+  accountNumber: string | null;
+  accountHolderName: string | null;
   driver: {
     id: string;
     plateNumber: string;
@@ -127,6 +130,9 @@ function toSessionUser(user: {
   phone: string | null;
   googleId: string | null;
   avatar: string | null;
+  bankName: string | null;
+  accountNumber: string | null;
+  accountHolderName: string | null;
   driver: {
     id: string;
     plateNumber: string;
@@ -144,6 +150,9 @@ function toSessionUser(user: {
     phone: user.phone,
     googleId: user.googleId ?? null,
     avatar: user.avatar ?? null,
+    bankName: user.bankName ?? null,
+    accountNumber: user.accountNumber ?? null,
+    accountHolderName: user.accountHolderName ?? null,
     driver: user.driver
       ? {
           id: user.driver.id,
@@ -235,6 +244,9 @@ export function publicUser(user: SessionUser) {
     phone: user.phone,
     googleId: user.googleId ?? null,
     avatar: user.avatar ?? null,
+    bankName: user.bankName ?? null,
+    accountNumber: user.accountNumber ?? null,
+    accountHolderName: user.accountHolderName ?? null,
     driver: user.driver,
   };
 }

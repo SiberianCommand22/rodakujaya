@@ -1,5 +1,4 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, rmSync } from "node:fs";
 import path from "node:path";
 import { io, type Socket } from "socket.io-client";
 import type { PrismaClient } from "@prisma/client";
@@ -8,119 +7,9 @@ export const TEST_PORT = Number(process.env.VERIFY_PORT ?? 3199);
 export const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
 export const SOCKET_URL = BASE_URL;
 
-/** Throwaway SQLite file so a verification run never touches prisma/dev.db. */
-export const TEST_DB = path.join(process.cwd(), "prisma", "verify.db");
-
-const PRISMA_CLI = path.join(process.cwd(), "node_modules", "prisma", "build", "index.js");
 const TSX_CLI = path.join(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs");
 
-export function resetTestDatabase(): void {
-  for (const suffix of ["", "-journal", "-wal", "-shm"]) {
-    const file = `${TEST_DB}${suffix}`;
-    if (existsSync(file)) rmSync(file, { force: true });
-  }
-}
-
-function runNode(
-  args: string[],
-  extraEnv: Record<string, string> = {},
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, args, {
-      cwd: process.cwd(),
-      env: { ...process.env, ...extraEnv },
-      stdio: "pipe",
-    });
-
-    let output = "";
-    child.stdout?.on("data", (chunk) => (output += String(chunk)));
-    child.stderr?.on("data", (chunk) => (output += String(chunk)));
-    child.on("error", reject);
-    child.on("exit", (code) =>
-      code === 0
-        ? resolve()
-        : reject(new Error(`exit ${code}\n${output}`)),
-    );
-  });
-}
-
-/** Creates the isolated schema. Runs before any Prisma client is constructed. */
-export function pushTestSchema(): Promise<void> {
-  return runNode([PRISMA_CLI, "db", "push"], { RODAKU_DB_PATH: TEST_DB });
-}
-
-const VERIFY_DIST_DIR = ".next-verify";
-
-let server: ChildProcess | null = null;
-
-export async function startServer(): Promise<void> {
-  server = spawn(process.execPath, [TSX_CLI, "server.ts"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(TEST_PORT),
-      RODAKU_DB_PATH: TEST_DB,
-      NEXT_DIST_DIR: VERIFY_DIST_DIR,
-      NODE_ENV: "development",
-    },
-    stdio: "pipe",
-  });
-
-  const logs: string[] = [];
-  server.stdout?.on("data", (chunk) => {
-    const text = String(chunk);
-    logs.push(text);
-    if (process.env.VERIFY_DEBUG) process.stdout.write(`[srv] ${text}`);
-  });
-  server.stderr?.on("data", (chunk) => {
-    const text = String(chunk);
-    logs.push(text);
-    if (process.env.VERIFY_DEBUG) process.stderr.write(`[srv!] ${text}`);
-  });
-
-  const deadline = Date.now() + 180_000;
-  while (Date.now() < deadline) {
-    if (server.exitCode !== null) {
-      throw new Error(`server berhenti dini:\n${logs.join("")}`);
-    }
-    try {
-      // 401 proves the Next.js request pipeline and Prisma are both live.
-      const res = await fetch(`${BASE_URL}/api/auth/me`);
-      if (res.status === 401 || res.ok) return;
-    } catch {
-      // Not listening yet.
-    }
-    await delay(500);
-  }
-
-  throw new Error(`server tidak siap dalam batas waktu:\n${logs.join("")}`);
-}
-
-export async function stopServer(): Promise<void> {
-  const child = server;
-  server = null;
-  if (!child || child.exitCode !== null) return;
-
-  await new Promise<void>((resolve) => {
-    const timer = setTimeout(() => {
-      child.kill("SIGKILL");
-      resolve();
-    }, 10_000);
-    child.once("exit", () => {
-      clearTimeout(timer);
-      resolve();
-    });
-    child.kill("SIGTERM");
-  });
-
-  // Drop the throwaway build output so repeated runs stay fast and clean.
-  rmSync(path.join(process.cwd(), VERIFY_DIST_DIR), {
-    recursive: true,
-    force: true,
-  });
-}
-
-export function delay(ms: number): Promise<void> {
+function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
@@ -204,6 +93,67 @@ export class TestClient {
   }
 }
 
+let server: ChildProcess | null = null;
+
+export async function startServer(): Promise<void> {
+  server = spawn(process.execPath, [TSX_CLI, "server.ts"], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: String(TEST_PORT),
+      NODE_ENV: "development",
+    },
+    stdio: "pipe",
+  });
+
+  const logs: string[] = [];
+  server.stdout?.on("data", (chunk) => {
+    const text = String(chunk);
+    logs.push(text);
+    if (process.env.VERIFY_DEBUG) process.stdout.write(`[srv] ${text}`);
+  });
+  server.stderr?.on("data", (chunk) => {
+    const text = String(chunk);
+    logs.push(text);
+    if (process.env.VERIFY_DEBUG) process.stderr.write(`[srv!] ${text}`);
+  });
+
+  const deadline = Date.now() + 180_000;
+  while (Date.now() < deadline) {
+    if (server.exitCode !== null) {
+      throw new Error(`server berhenti dini:\n${logs.join("")}`);
+    }
+    try {
+      // 401 proves the Next.js request pipeline and Prisma are both live.
+      const res = await fetch(`${BASE_URL}/api/auth/me`);
+      if (res.status === 401 || res.ok) return;
+    } catch {
+      // Not listening yet.
+    }
+    await delay(500);
+  }
+
+  throw new Error(`server tidak siap dalam batas waktu:\n${logs.join("")}`);
+}
+
+export async function stopServer(): Promise<void> {
+  const child = server;
+  server = null;
+  if (!child || child.exitCode !== null) return;
+
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      resolve();
+    }, 10_000);
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+    child.kill("SIGTERM");
+  });
+}
+
 export function connectSocket(): Promise<Socket> {
   const socket = io(SOCKET_URL, {
     transports: ["websocket"],
@@ -269,8 +219,6 @@ export async function expectNoEvent<T>(
   event: string,
   graceMs = 1500,
 ): Promise<void> {
-  // An array rather than a nullable variable: TypeScript cannot see that the
-  // listener body runs before the check.
   const seen: T[] = [];
   const handler = (payload: T) => {
     seen.push(payload);
@@ -300,7 +248,7 @@ export type SeededOrder = {
 };
 
 /**
- * Creates a driver account to own the seeded trips.
+ * Creates a driver account with bank details so P2P transfers can settle.
  *
  * `ratingAvg`/`totalTrips` are left at the schema defaults on purpose: the review
  * endpoint recomputes both from the Review table, so a fabricated baseline would
@@ -314,7 +262,10 @@ export async function seedDriver(db: PrismaClient, label: string): Promise<Seede
       name: `Driver Verifikasi ${label}`,
       password: "verify-only",
       role: "DRIVER",
-      wallet: { create: {} },
+      phone: "08123456789",
+      bankName: "BCA",
+      accountNumber: `123456${String(Math.floor(Math.random() * 1e6)).padStart(4, "0")}`,
+      accountHolderName: `Driver Verifikasi ${label}`,
       driver: {
         create: { plateNumber: `B 9${label.slice(0, 3).toUpperCase()} VER` },
       },
@@ -332,7 +283,7 @@ export async function seedDriver(db: PrismaClient, label: string): Promise<Seede
 }
 
 /**
- * Writes a trip straight to SQLite.
+ * Writes a trip straight to Postgres.
  *
  * Driving a real trip through the simulator takes ~30s of wall clock per order;
  * the pay/review endpoints only care about the persisted state, so seeding it
@@ -344,7 +295,12 @@ export async function seedOrder(
     customerId: string;
     driverId: string;
     fare: number;
-    status?: "COMPLETED" | "ON_TRIP" | "ACCEPTED";
+    status?:
+      | "COMPLETED"
+      | "ON_TRIP"
+      | "ACCEPTED"
+      | "PICKING_UP"
+      | "AWAITING_PAYMENT";
     createdAt?: Date;
   },
 ): Promise<SeededOrder> {
@@ -371,3 +327,10 @@ export async function seedOrder(
 
   return { id: order.id, fare: order.fare };
 }
+
+/** Shared bank payload for registration helpers. */
+export const BANK_FIELDS = {
+  bankName: "BCA",
+  accountNumber: "1234567890",
+  accountHolderName: "Pengguna Verifikasi",
+} as const;

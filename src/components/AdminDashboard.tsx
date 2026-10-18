@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { type AuthUser } from "@/components/AuthPanel";
 import PortalLogin from "@/components/PortalLogin";
-import AdminWithdrawals from "@/components/AdminWithdrawals";
 import RodakuLogo from "@/components/RodakuLogo";
 import { portalLogout } from "@/lib/sessionClient";
 import { formatIDR, formatKm } from "@/lib/utils";
@@ -53,9 +52,9 @@ type Overview = {
     onlineDrivers: number;
     turnover: number;
     commission: number;
-    qrisPaid?: number;
-    qrisTurnover?: number;
-    qrisCommission?: number;
+    paidToday?: number;
+    settledTurnover?: number;
+    settledCommission?: number;
     driverPayout?: number;
   };
   drivers: DriverRow[];
@@ -156,11 +155,9 @@ export default function AdminDashboard({ initialUser }: { initialUser: AuthUser 
     { label: "Pesanan Hari Ini", value: String(data?.stats.ordersToday ?? "-"), icon: "📦" },
     { label: "Driver Online", value: String(data?.stats.onlineDrivers ?? "-"), icon: "🛵" },
     { label: "Perputaran Uang", value: data ? formatIDR(data.stats.turnover) : "-", icon: "💰" },
-    { label: "Komisi Platform 20%", value: data ? formatIDR(data.stats.commission) : "-", icon: "🏦" },
-    { label: "QRIS Lunas Hari Ini", value: data?.stats.qrisPaid !== undefined ? String(data.stats.qrisPaid) : "-", icon: "🧾" },
-    { label: "Omzet QRIS Lunas", value: data?.stats.qrisTurnover !== undefined ? formatIDR(data.stats.qrisTurnover) : "-", icon: "💳" },
-    { label: "Komisi QRIS 20%", value: data?.stats.qrisCommission !== undefined ? formatIDR(data.stats.qrisCommission) : "-", icon: "🏛" },
-    { label: "Bagi Hasil Driver 80%", value: data?.stats.driverPayout !== undefined ? formatIDR(data.stats.driverPayout) : "-", icon: "🤝" },
+    { label: "Lunas Hari Ini", value: data?.stats.paidToday !== undefined ? String(data.stats.paidToday) : "-", icon: "🧾" },
+    { label: "Omzet Lunas", value: data?.stats.settledTurnover !== undefined ? formatIDR(data.stats.settledTurnover) : "-", icon: "💳" },
+    { label: "Untuk Driver 100%", value: data?.stats.driverPayout !== undefined ? formatIDR(data.stats.driverPayout) : "-", icon: "🤝" },
   ];
 
   return (
@@ -216,7 +213,6 @@ export default function AdminDashboard({ initialUser }: { initialUser: AuthUser 
         </section>
 
         {/* Live fleet monitoring map */}
-        <AdminWithdrawals />
         <section className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-blue-100">
           <div className="flex items-center justify-between px-4 py-3">
             <h2 className="text-sm font-black text-[#0F172A]">🗺 Live Fleet Monitoring</h2>

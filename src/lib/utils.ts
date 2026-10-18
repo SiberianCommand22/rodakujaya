@@ -10,6 +10,7 @@ export type OrderStatus =
   | "ACCEPTED"
   | "PICKING_UP"
   | "ON_TRIP"
+  | "AWAITING_PAYMENT"
   | "COMPLETED"
   | "CANCELLED";
 
@@ -86,6 +87,7 @@ export const ORDER_STATUS_META: Record<
   ACCEPTED: { label: "Driver Diterima", tone: "active" },
   PICKING_UP: { label: "Driver Menuju Lokasi", tone: "active" },
   ON_TRIP: { label: "Perjalanan Berlangsung", tone: "active" },
+  AWAITING_PAYMENT: { label: "Menunggu Pembayaran", tone: "active" },
   COMPLETED: { label: "Perjalanan Selesai", tone: "success" },
   CANCELLED: { label: "Pesanan Dibatalkan", tone: "danger" },
 };
@@ -93,7 +95,7 @@ export const ORDER_STATUS_META: Record<
 export const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
   ACCEPTED: "PICKING_UP",
   PICKING_UP: "ON_TRIP",
-  ON_TRIP: "COMPLETED",
+  ON_TRIP: "AWAITING_PAYMENT",
 };
 
 /** Pusat awal peta: Jakarta sebagai titik tengah Jabodetabek & Jawa Barat. */

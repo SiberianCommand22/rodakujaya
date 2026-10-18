@@ -3,7 +3,6 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { createSession, publicUser, setSessionCookie } from "@/lib/auth";
 import { authLimiter, rateLimitResponse } from "@/lib/rateLimit";
-import { ensureWallet, serializeWallet, toRupiah } from "@/lib/wallet";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -120,7 +119,7 @@ export async function POST(request: Request) {
         }
       }
     } else {
-      // Pendaftar baru via Google: CUSTOMER + wallet sambutan Rp 100.000.
+      // Pendaftar baru via Google: CUSTOMER.
       try {
         user = await db.user.create({
           data: {
@@ -147,9 +146,6 @@ export async function POST(request: Request) {
       }
     }
 
-    const wallet = await ensureWallet(user.id);
-    const balance = toRupiah(wallet.balance);
-
     const token = await createSession(user.id);
     await setSessionCookie(token, user.role);
 
@@ -163,6 +159,9 @@ export async function POST(request: Request) {
         phone: user.phone,
         googleId: user.googleId ?? null,
         avatar: user.avatar ?? null,
+        bankName: user.bankName ?? null,
+        accountNumber: user.accountNumber ?? null,
+        accountHolderName: user.accountHolderName ?? null,
         driver: user.driver
           ? {
               id: user.driver.id,
@@ -174,8 +173,6 @@ export async function POST(request: Request) {
             }
           : null,
       }),
-      wallet: serializeWallet(wallet, []),
-      balance,
     });
   } catch (error) {
     console.error("[auth/google] gagal login Google", error);

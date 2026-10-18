@@ -2,7 +2,13 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 
-const LIVE_STATUSES = ["SEARCHING", "ACCEPTED", "PICKING_UP", "ON_TRIP"] as const;
+const LIVE_STATUSES = [
+  "SEARCHING",
+  "ACCEPTED",
+  "PICKING_UP",
+  "ON_TRIP",
+  "AWAITING_PAYMENT",
+] as const;
 
 /** Ringkasan operasional + armada + transaksi live untuk portal admin. */
 export async function GET() {
@@ -20,42 +26,44 @@ export async function GET() {
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
-  const [ordersToday, onlineDrivers, drivers, liveOrders, turnoverAgg, qrisAgg, qrisCount] = await Promise.all([
-    db.order.count({ where: { createdAt: { gte: startOfDay } } }),
-    db.driver.count({ where: { isOnline: true } }),
-    db.driver.findMany({
-      include: { user: { select: { name: true, phone: true, email: true } } },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-    }),
-    db.order.findMany({
-      where: { status: { in: [...LIVE_STATUSES] } },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-      include: {
-        customer: { select: { name: true } },
-        driver: { include: { user: { select: { name: true } } } },
-      },
-    }),
-    db.order.aggregate({
-      _sum: { fare: true },
-      where: { createdAt: { gte: startOfDay } },
-    }),
-    // Pelunasan QRIS terkonfirmasi hari ini — basis bagi hasil 20/80.
-    db.payment.aggregate({
-      _sum: { amount: true },
-      where: { method: "QRIS", status: "PAID", paidAt: { gte: startOfDay } },
-    }),
-    db.payment.count({
-      where: { method: "QRIS", status: "PAID", paidAt: { gte: startOfDay } },
-    }),
-  ]);
+  const [ordersToday, onlineDrivers, drivers, liveOrders, turnoverAgg, paidAgg, paidCount] =
+    await Promise.all([
+      db.order.count({ where: { createdAt: { gte: startOfDay } } }),
+      db.driver.count({ where: { isOnline: true } }),
+      db.driver.findMany({
+        include: { user: { select: { name: true, phone: true, email: true } } },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      }),
+      db.order.findMany({
+        where: { status: { in: [...LIVE_STATUSES] } },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+        include: {
+          customer: { select: { name: true } },
+          driver: { include: { user: { select: { name: true } } } },
+        },
+      }),
+      db.order.aggregate({
+        _sum: { fare: true },
+        where: { createdAt: { gte: startOfDay } },
+      }),
+      // Pelunasan transfer bank terkonfirmasi hari ini — 100% ke driver.
+      db.payment.aggregate({
+        _sum: { amount: true },
+        where: { method: "BANK_TRANSFER", status: "PAID", paidAt: { gte: startOfDay } },
+      }),
+      db.payment.count({
+        where: { method: "BANK_TRANSFER", status: "PAID", paidAt: { gte: startOfDay } },
+      }),
+    ]);
 
   const turnover = turnoverAgg._sum.fare ?? 0;
-  const commission = Math.round(turnover * 0.2);
-  const qrisTurnover = Number(qrisAgg._sum.amount?.toString() ?? 0);
-  const qrisCommission = Math.round(qrisTurnover * 0.2);
-  const driverPayout = qrisTurnover - qrisCommission;
+  // Komisi platform 0% — model P2P: driver menerima 100% tarif.
+  const commission = 0;
+  const settledTurnover = Number(paidAgg._sum?.amount?.toString() ?? 0);
+  const settledCommission = 0;
+  const driverPayout = settledTurnover - settledCommission;
 
   // Driver yang sedang membawa order aktif = on-trip.
   const onTripDriverIds = new Set(
@@ -68,9 +76,9 @@ export async function GET() {
       onlineDrivers,
       turnover,
       commission,
-      qrisPaid: qrisCount,
-      qrisTurnover,
-      qrisCommission,
+      paidToday: paidCount,
+      settledTurnover,
+      settledCommission,
       driverPayout,
     },
     drivers: drivers.map((d) => ({

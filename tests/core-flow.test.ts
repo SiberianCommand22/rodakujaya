@@ -3,16 +3,14 @@ import assert from "node:assert/strict";
 import type { PrismaClient } from "@prisma/client";
 import type { Socket } from "socket.io-client";
 import {
+  BANK_FIELDS,
   TestClient,
   connectSocket,
   joinTrackingRoom,
-  pushTestSchema,
-  resetTestDatabase,
   startServer,
   stopServer,
   waitForEvent,
 } from "./harness";
-import { WELCOME_BALANCE } from "@/lib/walletContract";
 
 type RoutingBody = {
   distanceKm: number;
@@ -59,9 +57,21 @@ type LocationPayload = {
 };
 
 type PayBody = {
-  payment: { id: string; orderId: string; amount: number; status: string };
-  alreadyPaid: boolean;
-  balance: number | null;
+  payment: {
+    id: string;
+    orderId: string;
+    method: string;
+    amount: number;
+    status: string;
+    claimedAt?: string | null;
+  };
+  alreadyPaid?: boolean;
+  alreadyClaimed?: boolean;
+};
+
+type ConfirmBody = {
+  payment?: { status: string; amount: number };
+  driverEarning?: number;
 };
 
 type RegisterBody = {
@@ -70,9 +80,10 @@ type RegisterBody = {
 
 /**
  * Alur penuh pemesanan RODAKU: promo RODAHEMAT → terima driver via socket →
- * 5 titik GPS → ON_TRIP → COMPLETED → RodaPay terpotong harga diskon.
+ * 5 titik GPS → AWAITING_PAYMENT → transfer bank (CLAIMED) → konfirmasi
+ * driver (PAID) — driver menerima 100% tarif (komisi 0%).
  *
- * Berjalan melawan `tsx server.ts` asli + SQLite terisolasi (port 3199).
+ * Berjalan melawan `tsx server.ts` asli + Postgres (DATABASE_URL).
  */
 describe("RODAKU - alur utama pemesanan", { concurrency: false }, () => {
   let db: PrismaClient;
@@ -88,10 +99,6 @@ describe("RODAKU - alur utama pemesanan", { concurrency: false }, () => {
   }
 
   before(async () => {
-    resetTestDatabase();
-    await pushTestSchema();
-    process.env.RODAKU_DB_PATH =
-      (await import("node:path")).join(process.cwd(), "prisma", "verify.db");
     ({ db } = (await import("@/lib/db")) as { db: PrismaClient });
     await startServer();
   });
@@ -100,23 +107,25 @@ describe("RODAKU - alur utama pemesanan", { concurrency: false }, () => {
     for (const socket of sockets) socket.disconnect();
     await stopServer();
     await db.$disconnect();
-    resetTestDatabase();
   });
 
-  describe("1-5. Pesan + promo, terima driver, GPS, selesai, bayar", () => {
-    it("pelanggan memesan dengan RODAHEMAT, driver menyelesaikan, saldo tepat", async () => {
+  describe("1-6. Pesan + promo, terima driver, GPS, transfer bank, konfirmasi", () => {
+    it("pelanggan memesan RODAHEMAT, transfer bank, driver konfirmasi — 100% ke driver", async () => {
       const customer = new TestClient("core-customer");
       const driverClient = new TestClient("core-driver");
+      const suffix = String(Math.floor(Math.random() * 1e6)).padStart(4, "0");
 
-      // Daftarkan pelanggan & driver (mendapat sesi + dompet + baris driver).
+      // Daftarkan pelanggan & driver (mendapat sesi + baris driver).
       const custReg = await customer.post<RegisterBody>("/api/auth/register", {
         name: "Pelanggan Inti",
         email: uniqueEmail("core-cust"),
         phone: "08123456789",
         password: "pengujian123",
         role: "CUSTOMER",
+        ...BANK_FIELDS,
+        accountNumber: `77${suffix}${suffix.slice(0, 2)}`,
       });
-      assert.equal(custReg.status, 201);
+      assert.equal(custReg.status, 201, JSON.stringify(custReg.body));
       const customerId = custReg.body.user.id;
 
       const drvReg = await driverClient.post<RegisterBody>("/api/auth/register", {
@@ -128,8 +137,10 @@ describe("RODAKU - alur utama pemesanan", { concurrency: false }, () => {
         vehiclePlate: "B 1234 TST",
         vehicleType: "RODA_MOTOR",
         vehicleBrand: "Honda Beat",
+        ...BANK_FIELDS,
+        accountNumber: `88${suffix}${suffix.slice(0, 2)}`,
       });
-      assert.equal(drvReg.status, 201);
+      assert.equal(drvReg.status, 201, JSON.stringify(drvReg.body));
 
       // Tarif acuan dari mesin routing yang sama dengan server.
       const pickup = { lat: -6.2, lng: 106.8 };
@@ -226,27 +237,45 @@ describe("RODAKU - alur utama pemesanan", { concurrency: false }, () => {
         assert.equal(got.heading, fix.heading);
       }
 
-      // 4. Transisi ON_TRIP → COMPLETED.
-      for (const next of ["ON_TRIP", "COMPLETED"] as const) {
+      // 4. Transisi ACCEPTED → PICKING_UP → ON_TRIP → AWAITING_PAYMENT.
+      for (const next of ["PICKING_UP", "ON_TRIP", "AWAITING_PAYMENT"] as const) {
         const res = await driverClient.request<PatchBody>("PATCH", "/api/orders", {
           orderId: order.id,
           status: next,
         });
-        assert.equal(res.status, 200, `transisi ${next} gagal`);
+        assert.equal(res.status, 200, `transisi ${next} gagal: ${JSON.stringify(res.body)}`);
         assert.equal(res.body.order.status, next);
       }
 
-      // 5. RodaPay terpotong tepat harga diskon.
-      const paid = await customer.post<PayBody>(`/api/orders/${order.id}/pay`, {
-        method: "RODA_PAY",
+      // 5. Pelanggan mengklaim transfer bank → Payment CLAIMED.
+      const claimed = await customer.post<PayBody>(`/api/orders/${order.id}/pay`, {
+        method: "BANK_TRANSFER",
       });
-      assert.equal(paid.status, 200);
-      assert.equal(paid.body.payment.amount, total);
-      assert.equal(paid.body.payment.status, "PAID");
-      assert.equal(paid.body.balance, WELCOME_BALANCE - total);
+      assert.equal(claimed.status, 200, JSON.stringify(claimed.body));
+      assert.equal(claimed.body.payment.status, "CLAIMED");
+      assert.equal(claimed.body.payment.method, "BANK_TRANSFER");
+      assert.equal(claimed.body.payment.amount, total);
 
-      const wallet = await db.wallet.findUniqueOrThrow({ where: { userId: customerId } });
-      assert.equal(Number(wallet.balance.toString()), WELCOME_BALANCE - total);
+      // 6. Driver konfirmasi penerimaan → Payment PAID, Order COMPLETED.
+      const confirmed = await driverClient.post<ConfirmBody>(
+        `/api/orders/${order.id}/confirm-payment`,
+      );
+      assert.equal(confirmed.status, 200, JSON.stringify(confirmed.body));
+      assert.equal(confirmed.body.payment?.status, "PAID");
+      assert.equal(confirmed.body.driverEarning, total, "platform fee 0%");
+
+      const finalOrder = await db.order.findUniqueOrThrow({ where: { id: order.id } });
+      assert.equal(finalOrder.status, "COMPLETED");
+
+      const payment = await db.payment.findUniqueOrThrow({
+        where: { orderId: order.id },
+      });
+      assert.equal(payment.status, "PAID");
+      assert.equal(Number(payment.amount.toString()), total);
+      assert.equal(payment.method, "BANK_TRANSFER");
+      assert.equal(payment.bankName, BANK_FIELDS.bankName);
+      assert.ok(payment.paidAt, "paidAt harus terisi");
+      void customerId;
     });
   });
 });

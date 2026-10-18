@@ -6,7 +6,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { type AuthUser } from "@/components/AuthPanel";
 import PortalLogin from "@/components/PortalLogin";
 import ChatDrawer from "@/components/ChatDrawer";
-import DriverWallet from "@/components/DriverWallet";
 import RodakuLogo from "@/components/RodakuLogo";
 import { portalLogout } from "@/lib/sessionClient";
 import { SOCKET_EVENTS, getSocket } from "@/lib/socket";
@@ -52,10 +51,10 @@ type IncomingOrder = {
 const TRIP_STEPS: { status: OrderStatus; label: string; hint: string }[] = [
   { status: "PICKING_UP", label: "Saya Sudah Tiba di Lokasi Jemput", hint: "Langkah 1 • Konfirmasi tiba" },
   { status: "ON_TRIP", label: "Mulai Perjalanan Bersama Pelanggan", hint: "Langkah 2 • Mulai argo" },
-  { status: "COMPLETED", label: "Selesaikan Perjalanan & Terima Bayaran", hint: "Langkah 3 • Selesai & terima bayaran" },
+  { status: "AWAITING_PAYMENT", label: "Selesaikan Perjalanan", hint: "Langkah 3 • Akhiri perjalanan" },
 ];
 
-const STEP_ORDER: OrderStatus[] = ["ACCEPTED", "PICKING_UP", "ON_TRIP", "COMPLETED"];
+const STEP_ORDER: OrderStatus[] = ["ACCEPTED", "PICKING_UP", "ON_TRIP", "AWAITING_PAYMENT", "COMPLETED"];
 
 function stepIndex(status: OrderStatus | null): number {
   if (!status) return -1;
@@ -67,6 +66,7 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
   ACCEPTED: "Pesanan Diterima",
   PICKING_UP: "Menuju Lokasi Jemput",
   ON_TRIP: "Dalam Perjalanan",
+  AWAITING_PAYMENT: "Menunggu Pembayaran",
   COMPLETED: "Selesai",
   CANCELLED: "Dibatalkan",
 };
@@ -92,8 +92,8 @@ export default function DriverDashboard({
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(15);
-  const [headerBalance, setHeaderBalance] = useState<number | null>(null);
-  const [driverTab, setDriverTab] = useState<"orders" | "wallet">("orders");
+  const [paymentClaimed, setPaymentClaimed] = useState(false);
+  const [confirmBusy, setConfirmBusy] = useState(false);
   const [driverHeading, setDriverHeading] = useState<number>(0);
 
   const posRef = useRef<LatLng | null>(null);
@@ -101,27 +101,9 @@ export default function DriverDashboard({
   const watchRef = useRef<number | null>(null);
   const legStartRef = useRef<number>(0);
 
-  const refreshHeaderBalance = useCallback(async () => {
-    try {
-      const res = await fetch("/api/driver/withdraw");
-      if (!res.ok) return;
-      const data = (await res.json()) as { wallet?: { balance?: number } };
-      if (typeof data.wallet?.balance === "number") setHeaderBalance(data.wallet.balance);
-    } catch {
-      /* best-effort */
-    }
-  }, []);
-
   useEffect(() => {
     activeRef.current = active;
   }, [active]);
-
-  // Pill saldo header: muat saat sesi driver valid.
-  useEffect(() => {
-    if (!user?.driver) return;
-    const t = setTimeout(() => void refreshHeaderBalance(), 0);
-    return () => clearTimeout(t);
-  }, [user?.driver, refreshHeaderBalance]);
 
   // Unlock Web Audio on the first gesture so alerts can play later.
   useEffect(() => {
@@ -167,6 +149,8 @@ export default function DriverDashboard({
 
         setActive(data.order);
         setStatus(data.order.status);
+        // Recover the P2P payment-claim flag after a refresh.
+        setPaymentClaimed(data.order.payment?.status === "CLAIMED");
 
         // Place the marker on the last fix persisted in SQLite, so the map is
         // correct until live telemetry resumes.
@@ -227,6 +211,23 @@ export default function DriverDashboard({
       socket.off(SOCKET_EVENTS.ORDER_CREATED, onOrderNew);
     };
   }, [online, soundOn]);
+
+  // P2P: pelanggan mengklaim transfer bank → aktifkan tombol konfirmasi.
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket.connected) socket.connect();
+
+    const onPaymentClaimed = (payload: { orderId: string; amount?: number }) => {
+      if (!active || payload.orderId !== active.id) return;
+      setPaymentClaimed(true);
+      setToast("Pelanggan sudah mentransfer. Periksa m-banking Anda, lalu konfirmasi.");
+    };
+
+    socket.on(SOCKET_EVENTS.PAYMENT_CLAIMED, onPaymentClaimed);
+    return () => {
+      socket.off(SOCKET_EVENTS.PAYMENT_CLAIMED, onPaymentClaimed);
+    };
+  }, [active]);
 
   // Jaring pengaman Socket.io: polling daftar SEARCHING tiap 3 detik saat
   // online & tanpa order aktif, agar pesanan 100% muncul (anti-nyangkut).
@@ -313,10 +314,8 @@ export default function DriverDashboard({
       if (payload.orderId !== active.id) return;
       const amount = typeof payload.amount === "number" ? payload.amount : active.fare;
       setToast(
-        `💰 QRIS lunas ${formatIDR(amount)} — bagi hasil ${formatIDR(Math.round(amount * 0.8))} masuk dompet Anda.`,
+        `💰 Pembayaran lunas ${formatIDR(amount)} — terima kasih!`,
       );
-      // Segarkan pill saldo header detik itu juga.
-      void refreshHeaderBalance();
     };
     socket.on(SOCKET_EVENTS.ORDER_STATUS_UPDATE, onStatus);
     socket.on(SOCKET_EVENTS.PAYMENT_SETTLED, onPaid);
@@ -539,11 +538,19 @@ export default function DriverDashboard({
           plateNumber: user?.driver?.plateNumber ?? null,
         });
 
+        if (nextStatus === "AWAITING_PAYMENT") {
+          setToast(
+            "Perjalanan selesai. Menunggu pelanggan melakukan transfer bank.",
+          );
+          setPaymentClaimed(false);
+        }
+
         if (nextStatus === "COMPLETED") {
-          setToast("Pesanan selesai. Pembayaran QRIS akan diverifikasi pelanggan.");
+          setToast("Pembayaran diterima. Terima kasih!");
           setActive(null);
           setStatus(null);
           setAvailable([]);
+          setPaymentClaimed(false);
           posRef.current = null;
           setSelfPoint(null);
           setGpsAccuracy(null);
@@ -554,6 +561,43 @@ export default function DriverDashboard({
     },
     [active, user],
   );
+
+  /** Driver confirms the P2P bank transfer was received in their m-banking. */
+  const confirmPayment = useCallback(async () => {
+    if (!active || confirmBusy) return;
+    setConfirmBusy(true);
+    try {
+      const res = await fetch(`/api/orders/${active.id}/confirm-payment`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message ?? "Gagal konfirmasi pembayaran");
+
+      getSocket().emit(SOCKET_EVENTS.ORDER_STATUS_UPDATE, {
+        orderId: active.id,
+        status: "COMPLETED",
+        driverId: user?.driver?.id ?? null,
+        plateNumber: user?.driver?.plateNumber ?? null,
+      });
+      getSocket().emit(SOCKET_EVENTS.PAYMENT_SETTLED, {
+        orderId: active.id,
+        amount: active.fare,
+      });
+
+      setToast("Pembayaran diterima. Perjalanan selesai.");
+      setActive(null);
+      setStatus(null);
+      setAvailable([]);
+      setPaymentClaimed(false);
+      posRef.current = null;
+      setSelfPoint(null);
+      setGpsAccuracy(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal konfirmasi pembayaran");
+    } finally {
+      setConfirmBusy(false);
+    }
+  }, [active, confirmBusy, user]);
 
   async function claimOrder(order: IncomingOrder) {
     stopOrderAlert();
@@ -571,6 +615,7 @@ export default function DriverDashboard({
 
       setActive(order);
       setStatus("ACCEPTED");
+      setPaymentClaimed(false);
       setIncoming((prev) => (prev?.id === order.id ? null : prev));
       setAvailable((prev) => prev.filter((o) => o.id !== order.id));
       // Tempatkan kendaraan 400–800 m dari titik jemput agar Auto-Drive
@@ -679,10 +724,6 @@ export default function DriverDashboard({
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-3 py-1.5 text-xs font-black tabular-nums text-emerald-300 ring-1 ring-emerald-400/30">
-              <span aria-hidden>💰</span>
-              {headerBalance !== null ? formatIDR(headerBalance) : "Dompet…"}
-            </span>
             <span
               className={`rounded-full px-3 py-1 text-xs font-semibold ${
                 online ? "bg-emerald-500 text-white" : "bg-white/10 text-slate-300"
@@ -746,32 +787,6 @@ export default function DriverDashboard({
 
       <main className="mx-auto grid w-full max-w-6xl flex-1 gap-4 p-5 lg:grid-cols-2">
         <div className="flex flex-col gap-4">
-          {/* Tab navigasi: Order & Navigasi vs Dompet & Pencairan */}
-          <div className="grid grid-cols-2 gap-2 rounded-2xl bg-white/5 p-2" role="tablist" aria-label="Navigasi dashboard driver">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={driverTab === "orders"}
-              onClick={() => setDriverTab("orders")}
-              className={`rounded-xl px-3 py-2.5 text-xs font-black transition ${
-                driverTab === "orders" ? "bg-[#1D4ED8] text-white shadow" : "text-slate-300 hover:bg-white/10"
-              }`}
-            >
-              🛵 Order &amp; Navigasi
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={driverTab === "wallet"}
-              onClick={() => setDriverTab("wallet")}
-              className={`rounded-xl px-3 py-2.5 text-xs font-black transition ${
-                driverTab === "wallet" ? "bg-[#1D4ED8] text-white shadow" : "text-slate-300 hover:bg-white/10"
-              }`}
-            >
-              💳 Dompet &amp; Pencairan
-            </button>
-          </div>
-
           <div className="flex items-center gap-2 rounded-2xl bg-white/5 p-2">
             <span
               className={`flex-1 rounded-xl px-3 py-2 text-center text-xs font-bold ${
@@ -796,68 +811,66 @@ export default function DriverDashboard({
             </button>
           </div>
 
-          {driverTab === "orders" && (
-            <>
-              {!online && (
-                <div className="rounded-2xl bg-white/5 p-6 text-center text-sm text-slate-300">
-                  Anda sedang offline. Aktifkan toggle Online untuk menerima pesanan.
-                </div>
-              )}
+          {!online && (
+            <div className="rounded-2xl bg-white/5 p-6 text-center text-sm text-slate-300">
+              Anda sedang offline. Aktifkan toggle Online untuk menerima pesanan.
+            </div>
+          )}
 
-              {online && !active && (
-                <div className="rounded-2xl bg-white/5 p-6 text-center text-sm text-slate-300">
-                  {available.length > 0
-                    ? `Ada ${available.length} pesanan menunggu — pilih di bawah ini.`
-                    : "Menunggu pesanan masuk dari pelanggan..."}
-                </div>
-              )}
+          {online && !active && (
+            <div className="rounded-2xl bg-white/5 p-6 text-center text-sm text-slate-300">
+              {available.length > 0
+                ? `Ada ${available.length} pesanan menunggu — pilih di bawah ini.`
+                : "Menunggu pesanan masuk dari pelanggan..."}
+            </div>
+          )}
 
-              {online && !active && available.length > 0 && (
-                <div className="rounded-2xl bg-white p-4">
-                  <p className="text-xs font-black uppercase tracking-wide text-[#1D4ED8]">
-                    📋 Pesanan Menunggu di Sekitar ({available.length})
-                  </p>
-                  <ul className="mt-2 flex max-h-72 flex-col gap-2 overflow-y-auto">
-                    {available.map((order) => (
-                      <li
-                        key={order.id}
-                        className="rounded-2xl border border-blue-100 bg-[#EFF6FF]/60 p-3"
+          {online && !active && available.length > 0 && (
+            <div className="rounded-2xl bg-white p-4">
+              <p className="text-xs font-black uppercase tracking-wide text-[#1D4ED8]">
+                📋 Pesanan Menunggu di Sekitar ({available.length})
+              </p>
+              <ul className="mt-2 flex max-h-72 flex-col gap-2 overflow-y-auto">
+                {available.map((order) => (
+                  <li
+                    key={order.id}
+                    className="rounded-2xl border border-blue-100 bg-[#EFF6FF]/60 p-3"
+                  >
+                    <p className="truncate text-xs text-slate-600">
+                      📍 {order.pickupAddress ?? "-"}
+                    </p>
+                    <p className="truncate text-xs text-slate-600">
+                      🏁 {order.dropoffAddress ?? "-"}
+                    </p>
+                    {order.driverNote && (
+                      <p className="mt-1 truncate text-[11px] text-amber-800">
+                        📝 {order.driverNote}
+                      </p>
+                    )}
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-slate-600">
+                        {formatKm(order.distanceKm)} •{" "}
+                        <span className="font-black text-[#1D4ED8]">{formatIDR(order.fare)}</span>
+                        <span className="ml-1 font-bold text-emerald-600">
+                          (+{formatIDR(order.fare)})
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        disabled={acceptBusy === order.id}
+                        onClick={() => void claimOrder(order)}
+                        className="shrink-0 rounded-xl bg-[#1D4ED8] px-4 py-2 text-xs font-black text-white shadow transition hover:bg-[#1E40AF] disabled:opacity-60"
                       >
-                        <p className="truncate text-xs text-slate-600">
-                          📍 {order.pickupAddress ?? "-"}
-                        </p>
-                        <p className="truncate text-xs text-slate-600">
-                          🏁 {order.dropoffAddress ?? "-"}
-                        </p>
-                        {order.driverNote && (
-                          <p className="mt-1 truncate text-[11px] text-amber-800">
-                            📝 {order.driverNote}
-                          </p>
-                        )}
-                        <div className="mt-2 flex items-center justify-between gap-2">
-                          <span className="text-xs font-semibold text-slate-600">
-                            {formatKm(order.distanceKm)} •{" "}
-                            <span className="font-black text-[#1D4ED8]">{formatIDR(order.fare)}</span>
-                            <span className="ml-1 font-bold text-emerald-600">
-                              (+{formatIDR(Math.round(order.fare * 0.8))})
-                            </span>
-                          </span>
-                          <button
-                            type="button"
-                            disabled={acceptBusy === order.id}
-                            onClick={() => void claimOrder(order)}
-                            className="shrink-0 rounded-xl bg-[#1D4ED8] px-4 py-2 text-xs font-black text-white shadow transition hover:bg-[#1E40AF] disabled:opacity-60"
-                          >
-                            {acceptBusy === order.id ? "…" : "Terima"}
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+                        {acceptBusy === order.id ? "…" : "Terima"}
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
-              {active && (
+          {active && (
               <div className="rounded-2xl bg-white p-5">
               <p className="text-xs font-semibold uppercase tracking-wide text-[#1D4ED8]">
                 Pesanan Aktif
@@ -894,8 +907,8 @@ export default function DriverDashboard({
                 )}
               </div>
               <div className="mt-2 flex items-center justify-between rounded-xl bg-emerald-50 px-4 py-2.5 text-xs">
-                <span className="font-semibold text-emerald-700">Pendapatan bersih Anda (80%)</span>
-                <span className="text-sm font-black text-emerald-700">{formatIDR(Math.round(active.fare * 0.8))}</span>
+                <span className="font-semibold text-emerald-700">Pendapatan Anda (100%)</span>
+                <span className="text-sm font-black text-emerald-700">{formatIDR(active.fare)}</span>
               </div>
 
               <p className="mt-3 text-center text-[11px] text-slate-400">
@@ -916,7 +929,7 @@ export default function DriverDashboard({
                   const isNext =
                     (status === "ACCEPTED" && step.status === "PICKING_UP") ||
                     (status === "PICKING_UP" && step.status === "ON_TRIP") ||
-                    (status === "ON_TRIP" && step.status === "COMPLETED");
+                    (status === "ON_TRIP" && step.status === "AWAITING_PAYMENT");
                   return (
                     <button
                       key={step.status}
@@ -927,9 +940,7 @@ export default function DriverDashboard({
                         done
                           ? "bg-emerald-100 text-emerald-700"
                           : isNext
-                            ? step.status === "COMPLETED"
-                              ? "bg-emerald-600 text-white shadow-xl hover:bg-emerald-700"
-                              : "bg-[#1D4ED8] text-white shadow-xl hover:bg-[#1E40AF]"
+                            ? "bg-[#1D4ED8] text-white shadow-xl hover:bg-[#1E40AF]"
                             : "cursor-not-allowed bg-slate-100 text-slate-400 shadow-none"
                       }`}
                     >
@@ -937,18 +948,39 @@ export default function DriverDashboard({
                     </button>
                   );
                 })}
+
+                {/* Konfirmasi pembayaran P2P (transfer bank) */}
+                {status === "AWAITING_PAYMENT" && (
+                  <div className="mt-2 rounded-2xl bg-amber-50 p-4 text-sm">
+                    {paymentClaimed ? (
+                      <>
+                        <p className="text-xs font-semibold text-amber-800">
+                          💰 Pelanggan sudah mentransfer <strong>{formatIDR(active.fare)}</strong>.
+                          Periksa mutasi m-banking Anda, lalu konfirmasi.
+                        </p>
+                        <button
+                          type="button"
+                          disabled={confirmBusy}
+                          onClick={() => void confirmPayment()}
+                          className="mt-3 w-full rounded-2xl bg-emerald-600 py-3 text-sm font-black text-white shadow-xl transition hover:bg-emerald-700 disabled:opacity-60"
+                        >
+                          {confirmBusy ? "Memproses…" : "Konfirmasi Pembayaran Diterima"}
+                        </button>
+                      </>
+                    ) : (
+                      <p className="text-xs text-amber-800">
+                        Menunggu pelanggan mentransfer ke rekening Anda…
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <p className="text-center text-[10px] text-slate-400">
-                  Selesaikan langkah berurutan: tiba → mulai perjalanan → selesai & terima bayaran.
+                  Selesaikan langkah berurutan: tiba → mulai perjalanan → selesaikan perjalanan.
                 </p>
               </div>
             </div>
               )}
-            </>
-          )}
-
-          {driverTab === "wallet" && (
-            <DriverWallet />
-          )}
         </div>
 
         <div className="min-h-[50dvh] overflow-hidden rounded-2xl">
@@ -1024,8 +1056,8 @@ export default function DriverDashboard({
                 <span className="text-xl font-black text-[#1D4ED8]">{formatIDR(incoming.fare)}</span>
               </div>
               <div className="mt-1 flex items-center justify-between border-t border-dashed border-blue-100 pt-2">
-                <span className="text-xs font-semibold text-emerald-700">Pendapatan bersih Anda (80%)</span>
-                <span className="font-black text-emerald-600">{formatIDR(Math.round(incoming.fare * 0.8))}</span>
+                <span className="text-xs font-semibold text-emerald-700">Pendapatan Anda (100%)</span>
+                <span className="font-black text-emerald-600">{formatIDR(incoming.fare)}</span>
               </div>
             </div>
 

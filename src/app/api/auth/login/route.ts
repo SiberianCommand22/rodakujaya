@@ -77,6 +77,9 @@ export async function POST(request: Request) {
       phone: user.phone,
       googleId: user.googleId ?? null,
       avatar: user.avatar ?? null,
+      bankName: user.bankName ?? null,
+      accountNumber: user.accountNumber ?? null,
+      accountHolderName: user.accountHolderName ?? null,
       driver: user.driver
         ? {
             id: user.driver.id,

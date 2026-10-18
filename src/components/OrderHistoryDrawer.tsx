@@ -25,6 +25,7 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
   ACCEPTED: "Driver Diterima",
   PICKING_UP: "Driver Menuju Lokasi",
   ON_TRIP: "Dalam Perjalanan",
+  AWAITING_PAYMENT: "Menunggu Pembayaran",
   COMPLETED: "Selesai",
   CANCELLED: "Dibatalkan",
 };
@@ -34,6 +35,7 @@ const TONE: Record<OrderStatus, string> = {
   ACCEPTED: "bg-blue-100 text-blue-800",
   PICKING_UP: "bg-blue-100 text-blue-800",
   ON_TRIP: "bg-blue-100 text-blue-800",
+  AWAITING_PAYMENT: "bg-violet-100 text-violet-800",
   COMPLETED: "bg-emerald-100 text-emerald-800",
   CANCELLED: "bg-red-100 text-red-800",
 };

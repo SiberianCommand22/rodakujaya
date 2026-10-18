@@ -22,18 +22,19 @@ enum OrderStatus {
   ACCEPTED
   PICKING_UP
   ON_TRIP
+  AWAITING_PAYMENT
   COMPLETED
   CANCELLED
 }
 
 enum PaymentMethod {
   CASH
-  QRIS
-  RODA_PAY
+  BANK_TRANSFER
 }
 
 enum PaymentStatus {
   PENDING
+  CLAIMED
   PAID
   FAILED
 }
@@ -47,6 +48,14 @@ model User {
   phone     String?
   googleId  String?  @unique
   avatar    String?
+
+  /// Nama bank rekening (mis. BCA, Mandiri, BRI, BNI).
+  bankName String?
+  /// Nomor rekening untuk menerima transfer P2P.
+  accountNumber String?
+  /// Nama pemilik rekening (sesuai buku tabungan).
+  accountHolderName String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -54,7 +63,6 @@ model User {
   orders   Order[]  @relation("CustomerOrders")
   sessions Session[]
   reviews  Review[]
-  wallet   Wallet?
 }
 
 model Driver {
@@ -123,15 +131,23 @@ model Order {
   @@index([customerId])
 }
 
-/// One payment per order. amount is Decimal per spec; SQLite has no native
-/// DECIMAL so Prisma maps it to NUMERIC/REAL.
+/// One payment per order. Records the P2P bank transfer claim lifecycle:
+/// PENDING (belum ada klaim) → CLAIMED (pelanggan menekan "Saya Sudah
+/// Transfer") → PAID (driver mengonfirmasi dana masuk) atau FAILED.
 model Payment {
   id        String        @id @default(uuid())
   orderId   String        @unique
   method    PaymentMethod
   amount    Decimal
   status    PaymentStatus @default(PENDING)
+  /// Bank yang dituju pelanggan saat transfer (snapshot dari profil driver).
+  bankName  String?
+  /// Nomor rekening tujuan (snapshot dari profil driver).
+  accountNumber String?
+  /// Nama pemilik rekening tujuan (snapshot dari profil driver).
+  accountHolderName String?
   paidAt    DateTime?
+  claimedAt DateTime?
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
@@ -168,69 +184,4 @@ model Session {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
-}
-
-/// RodaPay balance. Every account owns exactly one wallet; it is created with the
-/// user at registration and topped up to Rp 100.000 as a welcome balance.
-model Wallet {
-  id     String @id @default(uuid())
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  /// Decimal per spec; SQLite has no native DECIMAL so Prisma maps it to NUMERIC.
-  balance      Decimal @default(100000)
-  /// Saldo yang ditahan untuk proses pencairan (anti double-withdraw).
-  lockedBalance Decimal @default(0)
-  transactions WalletTransaction[]
-  withdrawals  WithdrawalRequest[]
-  updatedAt    DateTime @updatedAt
-}
-
-/// Append-only ledger of every balance movement. The wallet row is the running
-/// total; this table is the audit trail that explains how it got there.
-model WalletTransaction {
-  id      String   @id @default(uuid())
-  walletId String
-  wallet  Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  amount  Decimal
-  /// "TOPUP" credits the wallet, "PAYMENT" debits it. Always positive.
-  /// "EARNING" credits driver 80%, "WITHDRAWAL_LOCK"/"WITHDRAWAL_SUCCESS"/
-  /// "WITHDRAWAL_REFUND" track payout lifecycle.
-  type    String
-  description String
-  /// Idempotency reference: settlement/withdrawal yang sama tidak boleh
-  /// dieksekusi dua kali. Null untuk mutasi lama sebelum hardening.
-  txRef   String?  @unique
-  createdAt   DateTime @default(now())
-
-  @@index([walletId, createdAt])
-}
-
-enum WithdrawalStatus {
-  PENDING
-  APPROVED
-  REJECTED
-}
-
-/// Pengajuan pencairan dana mitra driver. Saldo dipindah balance ->
-/// lockedBalance saat PENDING, lalu dipotong permanen (APPROVED) atau
-/// dikembalikan (REJECTED) oleh admin.
-model WithdrawalRequest {
-  id            String           @id @default(cuid())
-  walletId      String
-  driverId      String
-  amount        Decimal
-  bankName      String
-  accountNumber String
-  accountName   String
-  status        WithdrawalStatus @default(PENDING)
-  note          String?
-  /// Idempotency reference unik per pengajuan.
-  txHash        String?          @unique
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-
-  wallet        Wallet           @relation(fields: [walletId], references: [id], onDelete: Cascade)
-
-  @@index([driverId])
-  @@index([status])
 }

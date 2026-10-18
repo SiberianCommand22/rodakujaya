@@ -41,6 +41,12 @@ export type PaymentSettledPayload = {
   amount?: number;
 };
 
+/** Emitted to the driver's order room when the customer claims a bank transfer. */
+export type PaymentClaimedPayload = {
+  orderId: string;
+  amount?: number;
+};
+
 export type ChatRole = "CUSTOMER" | "DRIVER";
 
 /** Wire format for `chat:message` (client → server) and `chat:incoming` (server → room). */
@@ -61,6 +67,7 @@ export const SOCKET_EVENTS = {
   DRIVER_LOCATION_UPDATE: "driver:location_update",
   ORDER_STATUS_UPDATE: "order:status_update",
   PAYMENT_SETTLED: "payment:settled",
+  PAYMENT_CLAIMED: "payment:claimed",
   CHAT_MESSAGE: "chat:message",
   CHAT_INCOMING: "chat:incoming",
 } as const;
@@ -70,6 +77,7 @@ type ServerToClientEvents = {
   [SOCKET_EVENTS.ORDER_STATUS_UPDATE]: (payload: OrderStatusPayload) => void;
   [SOCKET_EVENTS.DRIVER_LOCATION_UPDATE]: (payload: DriverLocationPayload) => void;
   [SOCKET_EVENTS.PAYMENT_SETTLED]: (payload: PaymentSettledPayload) => void;
+  [SOCKET_EVENTS.PAYMENT_CLAIMED]: (payload: PaymentClaimedPayload) => void;
   [SOCKET_EVENTS.CHAT_INCOMING]: (payload: ChatMessagePayload) => void;
 };
 
@@ -79,6 +87,7 @@ type ClientToServerEvents = {
   [SOCKET_EVENTS.DRIVER_LOCATION_UPDATE]: (payload: DriverLocationPayload) => void;
   [SOCKET_EVENTS.ORDER_STATUS_UPDATE]: (payload: OrderStatusPayload) => void;
   [SOCKET_EVENTS.PAYMENT_SETTLED]: (payload: PaymentSettledPayload) => void;
+  [SOCKET_EVENTS.PAYMENT_CLAIMED]: (payload: PaymentClaimedPayload) => void;
   [SOCKET_EVENTS.CHAT_MESSAGE]: (payload: ChatMessagePayload) => void;
 };
 

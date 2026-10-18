@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import AuthPanel, { type AuthUser } from "@/components/AuthPanel";
 import BookingPanel, { type RouteQuote } from "@/components/BookingPanel";
-import QRISPaymentModal from "@/components/QRISPaymentModal";
 import ChatDrawer from "@/components/ChatDrawer";
 import DriverTracker, {
   CONNECTION_LABEL,
@@ -21,7 +20,7 @@ import TripSummaryModal, {
 import { SOCKET_EVENTS, getSocket } from "@/lib/socket";
 import { reverseGeocode } from "@/lib/geocode";
 import { nextQueueIndex } from "@/lib/tripSettlement";
-import { formatIDR, type LatLng, type OrderStatus, type Place, type VehicleType } from "@/lib/utils";
+import { type LatLng, type OrderStatus, type Place, type VehicleType } from "@/lib/utils";
 
 const Map = dynamic(() => import("@/components/Map"), {
   ssr: false,
@@ -67,8 +66,6 @@ export default function HomeClient({
   const [pickLabel, setPickLabel] = useState<string | null>(null);
   const pickBusyRef = useRef(false);
   const [sheetExpanded, setSheetExpanded] = useState(true);
-  const [balance, setBalance] = useState<number | null>(null);
-  const [topupBusy, setTopupBusy] = useState(false);
 
   const [quote, setQuote] = useState<RouteQuote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
@@ -83,52 +80,6 @@ export default function HomeClient({
   >([]);
 
   const quoteSeq = useRef(0);
-
-  // Saldo RodaPay untuk pill header / navbar.
-  const refreshBalance = useCallback(async () => {
-    try {
-      const res = await fetch("/api/wallet");
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data?.wallet) setBalance(data.wallet.balance);
-    } catch {
-      /* best-effort */
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    fetch("/api/wallet")
-      .then(async (res) => (res.ok ? await res.json() : null))
-      .then((data) => {
-        if (!cancelled && data?.wallet) setBalance(data.wallet.balance);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [user]);
-
-  async function handleTopup() {
-    if (topupBusy) return;
-    setTopupBusy(true);
-    try {
-      const res = await fetch("/api/wallet/topup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: 50_000 }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.message ?? "Gagal top-up");
-      if (data?.wallet) setBalance(data.wallet.balance);
-      else await refreshBalance();
-    } catch {
-      /* best-effort: biarkan pill apa adanya */
-    } finally {
-      setTopupBusy(false);
-    }
-  }
 
   useEffect(() => {
     if (!pickup || !dropoff) return;
@@ -177,6 +128,7 @@ export default function HomeClient({
   const toSummary = useCallback(
     (order: {
       id: string;
+      status: string;
       distanceKm: number;
       durationMinutes: number | null;
       fare: number;
@@ -184,8 +136,16 @@ export default function HomeClient({
       routeSource: string | null;
       pickupAddress: string | null;
       dropoffAddress: string | null;
-      driver: { plateNumber: string; user: { name: string } } | null;
-      payment: { status: string } | null;
+      driver: {
+        plateNumber: string;
+        user: {
+          name: string;
+          bankName?: string | null;
+          accountNumber?: string | null;
+          accountHolderName?: string | null;
+        };
+      } | null;
+      payment: { status: string; method?: string | null } | null;
     }): TripSummary => ({
       orderId: order.id,
       distanceKm: order.distanceKm,
@@ -197,6 +157,12 @@ export default function HomeClient({
       plateNumber: order.driver?.plateNumber ?? null,
       pickupAddress: order.pickupAddress,
       dropoffAddress: order.dropoffAddress,
+      orderStatus: order.status,
+      paymentStatus: (order.payment?.status ?? null) as TripSummary["paymentStatus"],
+      method: (order.payment?.method ?? null) as TripSummary["method"],
+      bankName: order.driver?.user?.bankName ?? null,
+      accountNumber: order.driver?.user?.accountNumber ?? null,
+      accountHolderName: order.driver?.user?.accountHolderName ?? null,
       paid: order.payment?.status === "PAID",
     }),
     [],
@@ -204,33 +170,20 @@ export default function HomeClient({
 
   type CompletedOrderView = Parameters<typeof toSummary>[0];
 
-  // Tagihan QRIS yang menunggu dipindai pelanggan (modal QRIS 100%).
-  const [qrisBill, setQrisBill] = useState<{
-    orderId: string;
-    fare: number;
-    pickupAddress: string | null;
-    dropoffAddress: string | null;
-  } | null>(null);
-
   /**
-   * Perjalanan COMPLETED selalu melewati QRIS dulu: belum lunas → modal
-   * QRIS, sudah lunas → modal ulasan. Satu-satunya pintu masuk struk.
+   * Perjalanan yang menunggu penyelesaian: AWAITING_PAYMENT (transfer P2P
+   * belum dikonfirmasi driver) atau COMPLETED dengan pembayaran belum lunas
+   * → modal struk. Sudah lunas → hanya langkah ulasan.
    */
   const presentCompletedOrder = useCallback(
     (order: CompletedOrderView) => {
-      if (order.payment?.status === "PAID") {
-        setQrisBill(null);
-        setSummary(toSummary(order));
-        setSummaryOpen(true);
-        return;
-      }
-      setSummaryOpen(false);
-      setQrisBill({
-        orderId: order.id,
-        fare: order.fare,
-        pickupAddress: order.pickupAddress,
-        dropoffAddress: order.dropoffAddress,
-      });
+      const paid = order.payment?.status === "PAID";
+      const awaiting =
+        order.status === "AWAITING_PAYMENT" ||
+        (order.status === "COMPLETED" && !paid);
+      if (!paid && !awaiting) return;
+      setSummary(toSummary(order));
+      setSummaryOpen(true);
     },
     [toSummary],
   );
@@ -309,7 +262,6 @@ export default function HomeClient({
   const resetToBooking = useCallback(() => {
     setSummaryOpen(false);
     setSummary(null);
-    setQrisBill(null);
     setPendingQueue([]);
     setOrderId(null);
     setOrderStatus(null);
@@ -352,30 +304,27 @@ export default function HomeClient({
   );
 
   /**
-   * Dipanggil modal QRIS setelah settlement 20/80 terkonfirmasi: tutup QRIS
-   * lalu tampilkan modal ulasan (summary sudah bertanda lunas).
+   * Refresh setelah pembayaran CASH: isi ulang antrean lalu tampilkan struk
+   * lunas untuk langkah ulasan.
    */
-  const handleQrisPaid = useCallback(
-    async (orderId: string) => {
-      setQrisBill(null);
-      try {
-        const res = await fetch(`/api/orders?limit=20`);
-        if (!res.ok) return;
-        const data = await res.json();
-        const order = (data.recent ?? []).find((o: { id: string }) => o.id === orderId);
-        if (!order) {
-          void advanceQueue(orderId);
-          return;
-        }
-        setPendingQueue(data.pendingSettlements ?? []);
+  const handlePaymentUpdate = useCallback(async () => {
+    if (!summary) return;
+    try {
+      const res = await fetch(`/api/orders?limit=20`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const order = (data.recent ?? []).find(
+        (o: { id: string }) => o.id === summary.orderId,
+      );
+      setPendingQueue(data.pendingSettlements ?? []);
+      if (order) {
         setSummary(toSummary(order));
         setSummaryOpen(true);
-      } catch {
-        /* best-effort: antrean ulasan bisa dibuka dari riwayat */
       }
-    },
-    [advanceQueue, toSummary],
-  );
+    } catch {
+      /* best-effort: antrean ulasan bisa dibuka dari riwayat */
+    }
+  }, [summary, toSummary]);
 
   function clearQuote() {
     setQuote(null);
@@ -625,19 +574,6 @@ export default function HomeClient({
               ← Beranda
             </button>
             <div className="ml-auto flex items-center gap-2">
-              {/* Pill Saldo RodaPay + Top Up instan */}
-              <span className="flex items-center gap-2 rounded-full bg-white/95 py-1.5 pl-3 pr-1.5 text-xs font-black text-[#1D4ED8] shadow-xl backdrop-blur">
-                <span aria-hidden>💳</span>
-                <span className="tabular-nums">{balance !== null ? formatIDR(balance) : "RodaPay"}</span>
-                <button
-                  type="button"
-                  onClick={handleTopup}
-                  disabled={topupBusy}
-                  className="rounded-full bg-[#1D4ED8] px-2.5 py-1 text-[10px] font-black text-white transition hover:bg-[#1E40AF] disabled:opacity-60"
-                >
-                  {topupBusy ? "…" : "+ Top Up"}
-                </button>
-              </span>
               <button
                 type="button"
                 onClick={() => setHistoryOpen(true)}
@@ -648,16 +584,9 @@ export default function HomeClient({
               </button>
               <button
                 type="button"
-                onClick={handleLogout}
-                className="rounded-full bg-red-500/95 px-3 py-2 text-xs font-black text-white shadow-xl backdrop-blur transition hover:bg-red-600"
-              >
-                Keluar
-              </button>
-              <button
-                type="button"
-                onClick={handleLogout}
-                aria-label="Profil dan keluar"
-                title={`${user.name} — Keluar`}
+                onClick={() => router.push("/profile")}
+                aria-label="Profil dan rekening bank"
+                title={`${user.name} — Profil & Rekening`}
                 className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-[#1D4ED8] text-sm font-black text-white shadow-xl"
               >
                 {user.avatar ? (
@@ -666,6 +595,13 @@ export default function HomeClient({
                 ) : (
                   user.name.charAt(0).toUpperCase()
                 )}
+              </button>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="rounded-full bg-red-500/95 px-3 py-2 text-xs font-black text-white shadow-xl backdrop-blur transition hover:bg-red-600"
+              >
+                Keluar
               </button>
             </div>
           </div>
@@ -792,7 +728,10 @@ export default function HomeClient({
                 vehicleLabel: prev?.vehicleLabel ?? (vehicleType === "RODA_MOBIL" ? "RodaMobil" : "RodaMotor"),
               }));
             }
-            if (payload.status === "COMPLETED" && payload.orderId) {
+            if (
+              (payload.status === "COMPLETED" || payload.status === "AWAITING_PAYMENT") &&
+              payload.orderId
+            ) {
               void openSummary(payload.orderId);
             }
             if (payload.status === "CANCELLED") {
@@ -813,18 +752,6 @@ export default function HomeClient({
           onUnreadChange={setChatUnread}
         />
 
-        <QRISPaymentModal
-          open={qrisBill !== null}
-          orderId={qrisBill?.orderId ?? null}
-          fare={qrisBill?.fare ?? 0}
-          pickupAddress={qrisBill?.pickupAddress}
-          dropoffAddress={qrisBill?.dropoffAddress}
-          onPaid={() => {
-            if (qrisBill) void handleQrisPaid(qrisBill.orderId);
-          }}
-          onClose={() => setQrisBill(null)}
-        />
-
         <TripSummaryModal
           key={summary?.orderId ?? "none"}
           open={summaryOpen}
@@ -834,6 +761,7 @@ export default function HomeClient({
           onSettled={() => {
             if (summary) void advanceQueue(summary.orderId);
           }}
+          onPaymentUpdate={() => void handlePaymentUpdate()}
         />
 
         <OrderHistoryDrawer open={historyOpen} onClose={() => setHistoryOpen(false)} />
@@ -981,7 +909,7 @@ export default function HomeClient({
                 {[
                   { value: "OSRM", label: "Rute jalan nyata" },
                   { value: "2", label: "Pilihan armada" },
-                  { value: "RodaPay", label: "Bayar instan" },
+                  { value: "100%", label: "Ke driver" },
                 ].map((s) => (
                   <div key={s.label} className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-100">
                     <dt className="text-base font-black text-[#0F172A]">{s.value}</dt>
@@ -1074,20 +1002,20 @@ export default function HomeClient({
             </article>
             <article className="overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-sm transition hover:shadow-xl">
               <div className="bg-emerald-600 p-5 text-white">
-                <p className="text-4xl">💳</p>
-                <h3 className="mt-2 text-xl font-black">RodaPay</h3>
+                <p className="text-4xl">🏦</p>
+                <h3 className="mt-2 text-xl font-black">Bayar Transfer</h3>
               </div>
-              <div id="rodapay" className="scroll-mt-24 p-5">
+              <div id="transfer" className="scroll-mt-24 p-5">
                 <p className="text-sm leading-relaxed text-slate-600">
-                  Dompet digital instan bebas uang pas, top-up mudah, dan transaksi
-                  otomatis setiap perjalanan.
+                  Transfer langsung ke rekening driver — 100% tarif masuk ke driver,
+                  tanpa potongan platform. Verifikasi manual oleh driver.
                 </p>
                 <button
                   type="button"
                   onClick={handlePesan}
                   className="mt-4 w-full rounded-2xl bg-emerald-50 py-2.5 text-sm font-black text-emerald-700 transition hover:bg-emerald-600 hover:text-white"
                 >
-                  Aktifkan RodaPay
+                  Mulai Perjalanan
                 </button>
               </div>
             </article>
@@ -1135,7 +1063,7 @@ export default function HomeClient({
             <a href="#beranda" className="hover:text-[#1D4ED8]">Beranda</a>
             <a href="#layanan" className="hover:text-[#1D4ED8]">Layanan</a>
             <a href="#mitra" className="hover:text-[#1D4ED8]">Mitra Driver</a>
-            <a href="#rodapay" className="hover:text-[#1D4ED8]">RodaPay</a>
+            <a href="#transfer" className="hover:text-[#1D4ED8]">Bayar Transfer</a>
           </nav>
         </div>
       </footer>

@@ -1,197 +1,151 @@
-import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { ensureWallet, toRupiah } from "@/lib/wallet";
-import { QRIS_WINDOW_SECONDS, buildQrisString, shortTxRef } from "@/lib/qris";
+import { toRupiah } from "@/lib/wallet";
 
-/** Komisi platform 20% — tercatat di ringkasan /admin. */
-export const PLATFORM_FEE_BPS = 2_000; // basis poin: 20%
-/** Tipe ledger untuk kredit bagi hasil driver. */
-export const DRIVER_EARNING_TYPE = "EARNING";
+/**
+ * Peer-to-peer direct bank transfer settlement.
+ *
+ * Platform takes 0% commission — driver keeps 100% of the fare. There is no
+ * wallet, no QRIS gateway, and no automatic payout. The customer transfers
+ * directly to the driver's bank account, claims the transfer in-app, and the
+ * driver confirms receipt from their own m-banking before marking the order
+ * COMPLETED.
+ */
 
-export type QrisInvoice = {
-  orderId: string;
-  txRef: string;
-  amount: number;
-  discount: number;
-  promoCode: string | null;
-  qrisString: string;
-  expiresAt: string;
+export const PLATFORM_FEE_BPS = 0; // 0% — pure P2P, no platform commission
+
+export type BankDetails = {
+  bankName: string;
+  accountNumber: string;
+  accountHolderName: string;
 };
 
-function invoiceExpiry(payment: { updatedAt: Date; createdAt: Date }): string {
-  const base = (payment.updatedAt ?? payment.createdAt).getTime();
-  return new Date(base + QRIS_WINDOW_SECONDS * 1000).toISOString();
+export type ClaimResult =
+  | { outcome: "ok"; paymentId: string }
+  | { outcome: "not-found" }
+  | { outcome: "forbidden" }
+  | { outcome: "invalid-state" }
+  | { outcome: "already-claimed" };
+
+export type ConfirmResult =
+  | { outcome: "ok"; paymentId: string; driverEarning: number }
+  | { outcome: "not-found" }
+  | { outcome: "forbidden" }
+  | { outcome: "invalid-state" };
+
+/** Fetch the driver's bank details for an order, if registered. */
+export async function getDriverBankDetails(
+  orderId: string,
+): Promise<BankDetails | null> {
+  const order = await db.order.findUnique({
+    where: { id: orderId },
+    include: {
+      driver: { include: { user: {
+        select: { bankName: true, accountNumber: true, accountHolderName: true },
+      } } },
+    },
+  });
+  if (!order?.driver?.user.bankName || !order.driver.user.accountNumber) return null;
+  return {
+    bankName: order.driver.user.bankName,
+    accountNumber: order.driver.user.accountNumber,
+    accountHolderName: order.driver.user.accountHolderName ?? order.driver.user.bankName,
+  };
 }
 
 /**
- * Menerbitkan (atau memakai ulang) invoice QRIS PENDING untuk satu order.
- * Idempoten: order yang sudah PAID langsung dilaporkan lunas.
+ * Customer taps "Saya Sudah Transfer" after the trip. Moves Payment from
+ * PENDING → CLAIMED and snapshots the driver's bank details onto the payment.
  */
-export async function createQrisInvoice(orderId: string, customerId: string) {
-  const order = await db.order.findUnique({ where: { id: orderId } });
-  if (!order) return { outcome: "not-found" as const };
-  if (order.customerId !== customerId) return { outcome: "forbidden" as const };
-  if (order.status !== "COMPLETED") return { outcome: "invalid-state" as const };
+export async function claimBankTransfer(
+  orderId: string,
+  customerId: string,
+): Promise<ClaimResult> {
+  const order = await db.order.findUnique({
+    where: { id: orderId },
+    include: { payment: true, driver: { include: { user: true } } },
+  });
+  if (!order) return { outcome: "not-found" };
+  if (order.customerId !== customerId) return { outcome: "forbidden" };
+  if (order.status !== "AWAITING_PAYMENT") return { outcome: "invalid-state" };
+  if (order.payment?.status === "CLAIMED") return { outcome: "already-claimed" };
+  if (order.payment?.status === "PAID") return { outcome: "invalid-state" };
 
-  const existing = await db.payment.findUnique({ where: { orderId } });
-  if (existing?.status === "PAID") {
-    return {
-      outcome: "already-paid" as const,
-      payment: existing,
-      invoice: toInvoice(order, existing),
-    };
-  }
+  const bank = order.driver?.user;
+  if (!bank?.bankName || !bank.accountNumber) return { outcome: "invalid-state" };
 
-  const fare = new Prisma.Decimal(order.fare);
   const payment = await db.payment.upsert({
     where: { orderId },
-    update: { method: "QRIS", amount: fare, status: "PENDING", paidAt: null },
-    create: { orderId, method: "QRIS", amount: fare, status: "PENDING" },
+    create: {
+      orderId,
+      method: "BANK_TRANSFER",
+      amount: order.fare,
+      status: "CLAIMED",
+      bankName: bank.bankName,
+      accountNumber: bank.accountNumber,
+      accountHolderName: bank.accountHolderName ?? bank.name,
+      claimedAt: new Date(),
+    },
+    update: {
+      status: "CLAIMED",
+      bankName: bank.bankName,
+      accountNumber: bank.accountNumber,
+      accountHolderName: bank.accountHolderName ?? bank.name,
+      claimedAt: new Date(),
+    },
   });
 
-  return { outcome: "created" as const, payment, invoice: toInvoice(order, payment) };
+  return { outcome: "ok", paymentId: payment.id };
 }
-
-function toInvoice(
-  order: { id: string; fare: number; discount: number; promoCode: string | null },
-  payment: { updatedAt: Date; createdAt: Date },
-): QrisInvoice {
-  const amount = toRupiah(order.fare);
-  return {
-    orderId: order.id,
-    txRef: shortTxRef(order.id),
-    amount,
-    discount: order.discount ?? 0,
-    promoCode: order.promoCode,
-    qrisString: buildQrisString({ orderId: order.id, amount }),
-    expiresAt: invoiceExpiry(payment),
-  };
-}
-
-export type QrisSettlement = {
-  paymentId: string;
-  orderId: string;
-  amount: number;
-  /** 20% komisi platform dalam rupiah. */
-  platformFee: number;
-  /** 80% hak driver dalam rupiah. */
-  driverShare: number;
-  alreadyPaid: boolean;
-};
 
 /**
- * Mengonfirmasi pelunasan QRIS: Payment → PAID, 80% tarif dikreditkan ke
- * dompet Mitra Driver (idempoten), 20% tercatat sebagai komisi platform yang
- * diagregasi di /admin dari tabel Payment.
- *
- * Keamanan:
- * - Nominal SELALU dari order.fare di DB (bukan input browser) → anti fare tampering.
- * - Idempotent: Payment PAID dikembalikan apa adanya; kredit driver memakai
- *   txRef unik `QRIS-EARNING-{txRef}` sehingga retry webhook/verify ganda
- *   tidak menggandakan saldo (P2002 → dianggap sudah diproses).
- * - Seluruh mutasi dalam db.$transaction (ACID) → anti race condition.
+ * Driver verifies the transfer in their m-banking, then taps
+ * "Konfirmasi Pembayaran Diterima". Moves Payment → PAID and Order → COMPLETED.
+ * Driver earns 100% of the fare (PLATFORM_FEE_BPS = 0).
  */
-export async function settleQrisPayment(orderId: string): Promise<
-  | { outcome: "not-found" }
-  | { outcome: "invalid-state" }
-  | { outcome: "no-driver" }
-  | ({ outcome: "settled" } & QrisSettlement)
-> {
-  const order = await db.order.findUnique({ where: { id: orderId } });
-  if (!order) return { outcome: "not-found" };
-  if (order.status !== "COMPLETED") return { outcome: "invalid-state" };
-  if (!order.driverId) return { outcome: "no-driver" };
-
-  // Nominal dikunci dari server: hitung ulang dari DB, abaikan payload klien.
-  const fare = toRupiah(order.fare);
-  if (!Number.isFinite(fare) || fare <= 0) return { outcome: "invalid-state" };
-  const platformFee = Math.round((fare * PLATFORM_FEE_BPS) / 10_000);
-  const driverShare = fare - platformFee;
-  const paidAt = new Date();
-  const txRef = shortTxRef(order.id);
-  const earningTxRef = `QRIS-EARNING-${txRef}`;
-  const earningMarker = `Bagi hasil QRIS #${txRef}`;
-
-  const result = await db.$transaction(async (tx) => {
-    const current = await tx.payment.findUnique({ where: { orderId } });
-    if (current?.status === "PAID") {
-      return { alreadyPaid: true, payment: current };
-    }
-
-    const payment = await tx.payment.upsert({
-      where: { orderId },
-      update: { method: "QRIS", amount: new Prisma.Decimal(fare), status: "PAID", paidAt },
-      create: {
-        orderId,
-        method: "QRIS",
-        amount: new Prisma.Decimal(fare),
-        status: "PAID",
-        paidAt,
-      },
-    });
-
-    // Kredit driver idempoten: txRef unik + fallback marker per order agar retry
-    // webhook / verify ganda tidak menggandakan saldo.
-    const driver = await tx.driver.findUnique({ where: { id: order.driverId! } });
-    if (!driver) return { alreadyPaid: false, payment };
-
-    const wallet = await tx.wallet.upsert({
-      where: { userId: driver.userId },
-      update: {},
-      create: { userId: driver.userId, balance: new Prisma.Decimal(0) },
-    });
-
-    if (driverShare > 0) {
-      const dupe =
-        (await tx.walletTransaction.findUnique({ where: { txRef: earningTxRef } }).catch(() => null)) ??
-        (await tx.walletTransaction.findFirst({
-          where: { walletId: wallet.id, type: DRIVER_EARNING_TYPE, description: earningMarker },
-        }));
-      if (!dupe) {
-        try {
-          const balance = new Prisma.Decimal(wallet.balance);
-          await tx.wallet.update({
-            where: { id: wallet.id },
-            data: { balance: balance.plus(driverShare) },
-          });
-          await tx.walletTransaction.create({
-            data: {
-              walletId: wallet.id,
-              amount: new Prisma.Decimal(driverShare),
-              type: DRIVER_EARNING_TYPE,
-              description: `${earningMarker} — order #${order.id.slice(-8).toUpperCase()}`,
-              txRef: earningTxRef,
-            },
-          });
-        } catch (txError) {
-          // Balapan dua settlement bersamaan: P2002 = pihak lain menang duluan.
-          if (
-            txError instanceof Prisma.PrismaClientKnownRequestError &&
-            txError.code === "P2002"
-          ) {
-            // Sudah dikredit — lanjut sebagai idempoten.
-          } else {
-            throw txError;
-          }
-        }
-      }
-    }
-
-    return { alreadyPaid: false, payment };
+export async function confirmBankTransfer(
+  orderId: string,
+  driverUserId: string,
+): Promise<ConfirmResult> {
+  const order = await db.order.findUnique({
+    where: { id: orderId },
+    include: { payment: true, driver: { include: { user: true } } },
   });
+  if (!order) return { outcome: "not-found" };
+  if (order.driver?.user.id !== driverUserId) return { outcome: "forbidden" };
+  if (order.status !== "AWAITING_PAYMENT") return { outcome: "invalid-state" };
+  if (order.payment?.status !== "CLAIMED") return { outcome: "invalid-state" };
 
-  return {
-    outcome: "settled",
-    paymentId: result.payment.id,
-    orderId,
-    amount: fare,
-    platformFee,
-    driverShare,
-    alreadyPaid: result.alreadyPaid,
-  };
+  const fare = order.fare;
+  const platformFee = Math.round((fare * PLATFORM_FEE_BPS) / 10_000);
+  const driverEarning = fare - platformFee;
+
+  await db.$transaction([
+    db.payment.update({
+      where: { orderId },
+      data: { status: "PAID", paidAt: new Date() },
+    }),
+    db.order.update({
+      where: { id: orderId },
+      data: { status: "COMPLETED" },
+    }),
+  ]);
+
+  return { outcome: "ok", paymentId: order.payment.id, driverEarning };
 }
 
-/** Memastikan dompet driver ada (dipakai endpoint status driver). */
-export async function ensureDriverWallet(driverUserId: string) {
-  return ensureWallet(driverUserId);
+/**
+ * CASH path: complete the order immediately with no payment record lifecycle.
+ * Kept for parity with the old pay route — order moves ON_TRIP → COMPLETED.
+ */
+export async function completeCashOrder(orderId: string): Promise<void> {
+  await db.$transaction([
+    db.payment.upsert({
+      where: { orderId },
+      create: { orderId, method: "CASH", amount: 0, status: "PAID", paidAt: new Date() },
+      update: { method: "CASH", status: "PAID", paidAt: new Date() },
+    }),
+    db.order.update({ where: { id: orderId }, data: { status: "COMPLETED" } }),
+  ]);
 }
+
+export { toRupiah };

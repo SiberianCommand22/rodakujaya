@@ -176,10 +176,27 @@ const expectedFare = fareForRoute(route, vehicleType as VehicleType);
   return NextResponse.json({ order }, { status: 201 });
 }
 
-const ACTIVE_STATUSES = ["SEARCHING", "ACCEPTED", "PICKING_UP", "ON_TRIP"] as const;
+const ACTIVE_STATUSES = [
+  "SEARCHING",
+  "ACCEPTED",
+  "PICKING_UP",
+  "ON_TRIP",
+  "AWAITING_PAYMENT",
+] as const;
 
 const ORDER_INCLUDE = {
-  driver: { include: { user: { select: { name: true } } } },
+  driver: {
+    include: {
+      user: {
+        select: {
+          name: true,
+          bankName: true,
+          accountNumber: true,
+          accountHolderName: true,
+        },
+      },
+    },
+  },
   payment: true,
   review: true,
 } as const;
@@ -216,14 +233,21 @@ export async function GET(request: Request) {
 
   // Finished trips the customer still has to settle (or rate), oldest first so
   // the modal can walk the queue in a stable, explainable order.
+  // AWAITING_PAYMENT = trip ended, bank transfer not yet confirmed by driver.
   const pending = recent
-    .filter((o) => o.status === "COMPLETED" && o.payment?.status !== "PAID")
+    .filter(
+      (o) =>
+        (o.status === "AWAITING_PAYMENT" ||
+          (o.status === "COMPLETED" && o.payment?.status !== "PAID")) &&
+        o.payment?.status !== "PAID",
+    )
     .reverse();
 
   const pendingSettlements = pending.map((o) => ({
     orderId: o.id,
     fare: o.fare,
-    needsReview: !o.review,
+    needsReview: o.status === "COMPLETED" && !o.review,
+    awaitingPayment: o.status === "AWAITING_PAYMENT",
   }));
 
   return NextResponse.json({
@@ -246,6 +270,7 @@ const VALID_STATUSES: OrderStatus[] = [
   "ACCEPTED",
   "PICKING_UP",
   "ON_TRIP",
+  "AWAITING_PAYMENT",
   "COMPLETED",
   "CANCELLED",
 ];

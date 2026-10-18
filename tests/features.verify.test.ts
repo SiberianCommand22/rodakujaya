@@ -4,19 +4,16 @@ import type { PrismaClient } from "@prisma/client";
 import type { Socket } from "socket.io-client";
 import {
   BASE_URL,
-  TEST_DB,
+  BANK_FIELDS,
   TestClient,
   connectSocket,
   expectNoEvent,
   joinTrackingRoom,
-  pushTestSchema,
-  resetTestDatabase,
   seedDriver,
   seedOrder,
   startServer,
   stopServer,
   waitForEvent,
-  type ApiResponse,
   type SeededDriver,
 } from "./harness";
 import {
@@ -25,71 +22,67 @@ import {
   nextQueueIndex,
   queueBadge,
 } from "@/lib/tripSettlement";
-import { WELCOME_BALANCE, TOPUP_OPTIONS } from "@/lib/walletContract";
 
-type WalletBody = {
-  wallet: {
+type AuthBody = { user: { id: string; name: string; role: string } };
+
+type ProfileBody = {
+  user?: {
     id: string;
-    balance: number;
-    transactions: {
-      id: string;
-      amount: number;
-      type: string;
-      description: string;
-      createdAt: string;
-    }[];
+    name: string;
+    phone: string | null;
+    bankName: string | null;
+    accountNumber: string | null;
+    accountHolderName: string | null;
   };
-};
-
-type OrdersBody = {
-  pendingSettlement: { orderId: string; needsReview: boolean } | null;
-  pendingSettlements: { orderId: string; fare: number; needsReview: boolean }[];
+  error?: string;
+  message?: string;
+  details?: Record<string, string>;
 };
 
 type PayBody = {
-  payment: {
+  payment?: {
     id: string;
     orderId: string;
     method: string;
     amount: number;
     status: string;
+    claimedAt?: string | null;
   };
-  alreadyPaid: boolean;
-  balance: number | null;
+  alreadyClaimed?: boolean;
+  alreadyPaid?: boolean;
   error?: string;
   message?: string;
-  required?: number;
 };
 
-type AuthBody = { user: { id: string; name: string; role: string } };
+type OrdersBody = {
+  pendingSettlement: { orderId: string; needsReview: boolean } | null;
+  pendingSettlements: {
+    orderId: string;
+    fare: number;
+    needsReview: boolean;
+    awaitingPayment: boolean;
+  }[];
+};
 
 /**
- * End-to-end verification of the RodaPay wallet, the zero-pollution review flow,
- * the unpaid queue and the real-time chat channel.
+ * End-to-end verification of the P2P bank-transfer flow, the zero-pollution
+ * review queue and the real-time chat channel.
  *
- * Runs against a real `tsx server.ts` process and an isolated SQLite file, so
- * every assertion exercises the same code path a browser would.
+ * Runs against a real `tsx server.ts` process and the shared Postgres database
+ * (DATABASE_URL). Each scenario creates uniquely identified users so records
+ * never collide across runs.
  */
 describe("RODAKU - verifikasi fitur", { concurrency: false }, () => {
   let db: PrismaClient;
 
   before(async () => {
-    resetTestDatabase();
-    await pushTestSchema();
-
-    // Must happen before src/lib/db.ts is first imported: the client binds the
-    // database file at construction time.
-    process.env.RODAKU_DB_PATH = TEST_DB;
-
     ({ db } = (await import("@/lib/db")) as { db: PrismaClient });
-
     await startServer();
   });
 
   after(async () => {
     await stopServer();
     await db.$disconnect();
-    resetTestDatabase();
   });
 
   /** Registers a customer and returns a client holding its session cookie. */
@@ -105,133 +98,186 @@ describe("RODAKU - verifikasi fitur", { concurrency: false }, () => {
       phone: "08123456789",
       password: "verifikasi123",
       role: "CUSTOMER",
+      ...BANK_FIELDS,
+      accountNumber: `111111${String(Math.floor(Math.random() * 1e6)).padStart(4, "0")}`,
     });
 
     assert.equal(res.status, 201, `registrasi gagal: ${JSON.stringify(res.body)}`);
     return { client, userId: res.body.user.id };
   }
 
-  // ------------------------------------------------------------------
-  // Skenario 1 - Wallet otomatis saat pendaftaran
-  // ------------------------------------------------------------------
-  describe("1. Wallet dibuat otomatis saat pendaftaran", () => {
-    it("memberi saldo awal Rp 100.000 dan ledger kosong", async () => {
-      const { client, userId } = await registerCustomer("wallet-awal");
+  /** Registers a driver with bank details and returns a session client. */
+  async function registerDriver(label: string) {
+    const client = new TestClient(label);
+    const email = `verify-drv-${label}-${Date.now()}-${Math.floor(
+      Math.random() * 1e6,
+    )}@rodaku.test`;
 
-      const wallet = await db.wallet.findUnique({ where: { userId } });
-      assert.ok(wallet, "wallet harus dibuat bersama user");
-      assert.equal(Number(wallet.balance.toString()), WELCOME_BALANCE);
-
-      const res = await client.get<WalletBody>("/api/wallet");
-      assert.equal(res.status, 200);
-      assert.equal(res.body.wallet.balance, WELCOME_BALANCE);
-      assert.deepEqual(res.body.wallet.transactions, []);
-
-      // Driver memakai jalur registrasi yang sama.
-      const driver = new TestClient("wallet-driver");
-      const driverRes = await driver.post<AuthBody>("/api/auth/register", {
-        name: "Driver Dompet",
-        email: `verify-driver-wallet-${Date.now()}@rodaku.test`,
-        phone: "08123456789",
-        password: "verifikasi123",
-        role: "DRIVER",
-        vehiclePlate: "B 1234 VER",
-        vehicleType: "RODA_MOTOR",
-        vehicleBrand: "Honda Beat",
-      });
-      assert.equal(driverRes.status, 201);
-
-      const driverWallet = await db.wallet.findUnique({
-        where: { userId: driverRes.body.user.id },
-      });
-      assert.equal(
-        Number(driverWallet?.balance.toString()),
-        WELCOME_BALANCE,
-        "driver juga mendapat saldo awal",
-      );
+    const res = await client.post<AuthBody>("/api/auth/register", {
+      name: `Driver ${label}`,
+      email,
+      phone: "08123456789",
+      password: "verifikasi123",
+      role: "DRIVER",
+      vehiclePlate: "B 1234 VER",
+      vehicleType: "RODA_MOTOR",
+      vehicleBrand: "Honda Beat",
+      ...BANK_FIELDS,
+      accountNumber: `222222${String(Math.floor(Math.random() * 1e6)).padStart(4, "0")}`,
     });
 
-    it("menolak akses dompet tanpa sesi", async () => {
-      const anon = new TestClient("anon");
-      const res = await anon.get("/api/wallet");
+    assert.equal(res.status, 201, `registrasi driver gagal: ${JSON.stringify(res.body)}`);
+    return { client, userId: res.body.user.id };
+  }
+
+  // ------------------------------------------------------------------
+  // Skenario 1 - Profil + rekening bank wajib terisi saat daftar
+  // ------------------------------------------------------------------
+  describe("1. Profil & rekening bank", () => {
+    it("menyimpan rekening bank saat registrasi dan menolak akses tanpa sesi", async () => {
+      const { client, userId } = await registerCustomer("profil-awal");
+
+      const user = await db.user.findUniqueOrThrow({ where: { id: userId } });
+      assert.ok(user.bankName, "bankName harus tersimpan");
+      assert.ok(user.accountNumber, "accountNumber harus tersimpan");
+      assert.ok(user.accountHolderName, "accountHolderName harus tersimpan");
+
+      const anon = new TestClient("anon-profile");
+      const res = await anon.request("PATCH", "/api/profile", { name: "Hacker" });
       assert.equal(res.status, 401);
+    });
+
+    it("memperbarui nomor rekening lewat PATCH /api/profile", async () => {
+      const { client, userId } = await registerCustomer("profil-update");
+      const newAccount = `998877${String(Math.floor(Math.random() * 1e6)).padStart(4, "0")}`;
+
+      const res = await client.request<ProfileBody>(
+        "PATCH",
+        "/api/profile",
+        {
+          bankName: "Mandiri",
+          accountNumber: newAccount,
+          accountHolderName: "Nama Baru",
+        },
+      );
+      assert.equal(res.status, 200, JSON.stringify(res.body));
+      assert.equal(res.body.user?.bankName, "Mandiri");
+      assert.equal(res.body.user?.accountNumber, newAccount);
+      assert.equal(res.body.user?.accountHolderName, "Nama Baru");
+
+      const stored = await db.user.findUniqueOrThrow({ where: { id: userId } });
+      assert.equal(stored.bankName, "Mandiri");
+      assert.equal(stored.accountNumber, newAccount);
+      assert.equal(stored.accountHolderName, "Nama Baru");
+    });
+
+    it("menolak nomor rekening / bank yang tidak valid", async () => {
+      const { client } = await registerCustomer("profil-invalid");
+
+      const badBank = await client.request<ProfileBody>(
+        "PATCH",
+        "/api/profile",
+        { bankName: "Bank Fiktif" },
+      );
+      assert.equal(badBank.status, 400);
+      assert.equal(badBank.body.error, "VALIDATION_FAILED");
+      assert.ok(badBank.body.details?.bankName);
+
+      const badAccount = await client.request<ProfileBody>(
+        "PATCH",
+        "/api/profile",
+        { accountNumber: "abc" },
+      );
+      assert.equal(badAccount.status, 400);
+      assert.ok(badAccount.body.details?.accountNumber);
     });
   });
 
   // ------------------------------------------------------------------
-  // Skenario 2 - RODA_PAY: penolakan saat saldo kurang, potong saat cukup
+  // Skenario 2 - Pembayaran P2P: CASH & BANK_TRANSFER
   // ------------------------------------------------------------------
-  describe("2. Pembayaran RODA_PAY", () => {
-    it("menolak 400 saat saldo kurang dan memotong saldo saat cukup", async () => {
-      const { client, userId } = await registerCustomer("rodapay");
-      const driver: SeededDriver = await seedDriver(db, "bayar");
+  describe("2. Pembayaran P2P", () => {
+    it("CASH menyelesaikan order langsung tanpa klaim transfer", async () => {
+      const { client, userId } = await registerCustomer("pay-cash");
+      const driver = await seedDriver(db, "cash");
 
-      // Fare 120.000 > saldo awal 100.000.
       const trip = await seedOrder(db, {
         customerId: userId,
         driverId: driver.driverId,
-        fare: 120_000,
+        fare: 20_000,
+        status: "ON_TRIP",
       });
 
-      const rejected = await client.post<PayBody>(`/api/orders/${trip.id}/pay`, {
-        method: "RODA_PAY",
+      const res = await client.post<PayBody>(`/api/orders/${trip.id}/pay`, {
+        method: "CASH",
       });
+      assert.equal(res.status, 200, JSON.stringify(res.body));
+      assert.equal(res.body.alreadyPaid, false);
+      assert.equal(res.body.payment?.method, "CASH");
+      assert.equal(res.body.payment?.status, "PAID");
+      assert.equal(res.body.payment?.amount, 0);
 
-      assert.equal(rejected.status, 400);
-      assert.equal(rejected.body.error, "INSUFFICIENT_BALANCE");
-      assert.equal(rejected.body.message, "Saldo RodaPay tidak mencukupi");
-      assert.equal(rejected.body.balance, WELCOME_BALANCE);
-      assert.equal(rejected.body.required, 120_000);
+      const order = await db.order.findUniqueOrThrow({ where: { id: trip.id } });
+      assert.equal(order.status, "COMPLETED");
+    });
 
-      // Penolakan tidak boleh meninggalkan jejak: tidak ada payment, tidak ada
-      // mutasi dompet, saldo utuh.
-      const wallet = await db.wallet.findUniqueOrThrow({ where: { userId } });
-      assert.equal(await db.payment.count({ where: { orderId: trip.id } }), 0);
-      assert.equal(
-        await db.walletTransaction.count({ where: { walletId: wallet.id } }),
-        0,
-      );
-      assert.equal(Number(wallet.balance.toString()), WELCOME_BALANCE);
+    it("BANK_TRANSFER: CLAIMED lalu driver konfirmasi → PAID + COMPLETED, fee 0%", async () => {
+      const { client: customer, userId } = await registerCustomer("pay-transfer");
+      const { client: driverClient } = await registerDriver("pay-transfer");
+      const driver = await seedDriver(db, "transfer");
 
-      // Top-up secukupnya, lalu bayar.
-      const topup = await client.post<WalletBody>("/api/wallet/topup", {
-        amount: 50_000,
+      // Driver seed must share the bank of the registered driver session —
+      // instead re-seed order against a driver whose userId matches the session.
+      const driverUser = await db.user.findFirstOrThrow({
+        where: { email: { contains: "pay-transfer" }, role: "DRIVER" },
+        include: { driver: true },
       });
-      assert.equal(topup.status, 200);
-      assert.equal(topup.body.wallet.balance, 150_000);
+      assert.ok(driverUser.driver, "driver record harus ada");
 
-      const paid = await client.post<PayBody>(`/api/orders/${trip.id}/pay`, {
-        method: "RODA_PAY",
+      const trip = await seedOrder(db, {
+        customerId: userId,
+        driverId: driverUser.driver!.id,
+        fare: 50_000,
+        status: "AWAITING_PAYMENT",
       });
+      void driver;
 
-      assert.equal(paid.status, 200);
-      assert.equal(paid.body.alreadyPaid, false);
-      assert.equal(paid.body.balance, 30_000);
-      assert.equal(paid.body.payment.status, "PAID");
-      assert.equal(paid.body.payment.method, "RODA_PAY");
-      assert.equal(paid.body.payment.amount, 120_000);
-
-      const after = await db.wallet.findUniqueOrThrow({
-        where: { userId },
-        include: { transactions: { orderBy: { createdAt: "asc" } } },
+      const claim = await customer.post<PayBody>(`/api/orders/${trip.id}/pay`, {
+        method: "BANK_TRANSFER",
       });
-      assert.equal(Number(after.balance.toString()), 30_000);
+      assert.equal(claim.status, 200, JSON.stringify(claim.body));
+      assert.equal(claim.body.payment?.status, "CLAIMED");
+      assert.equal(claim.body.payment?.method, "BANK_TRANSFER");
+      assert.equal(claim.body.payment?.amount, 50_000);
+      assert.equal(claim.body.alreadyClaimed, false);
 
-      const ledger = after.transactions.map((t) => [t.type, Number(t.amount.toString())]);
-      assert.deepEqual(ledger, [
-        ["TOPUP", 50_000],
-        ["PAYMENT", 120_000],
-      ]);
-
-      // Membayar ulang tidak menarik saldo kedua kali.
-      const replay = await client.post<PayBody>(`/api/orders/${trip.id}/pay`, {
-        method: "RODA_PAY",
+      // Replay claim is idempotent.
+      const replay = await customer.post<PayBody>(`/api/orders/${trip.id}/pay`, {
+        method: "BANK_TRANSFER",
       });
       assert.equal(replay.status, 200);
-      assert.equal(replay.body.alreadyPaid, true);
+      assert.equal(replay.body.alreadyClaimed, true);
 
-      const afterReplay = await db.wallet.findUniqueOrThrow({ where: { userId } });
-      assert.equal(Number(afterReplay.balance.toString()), 30_000);
+      const confirmed = await driverClient.post<{
+        payment?: { status: string; amount: number };
+        driverEarning?: number;
+        error?: string;
+      }>(`/api/orders/${trip.id}/confirm-payment`);
+      assert.equal(confirmed.status, 200, JSON.stringify(confirmed.body));
+      assert.equal(confirmed.body.payment?.status, "PAID");
+      assert.equal(confirmed.body.driverEarning, 50_000, "driver keeps 100%");
+
+      const order = await db.order.findUniqueOrThrow({ where: { id: trip.id } });
+      assert.equal(order.status, "COMPLETED");
+
+      const payment = await db.payment.findUniqueOrThrow({
+        where: { orderId: trip.id },
+      });
+      assert.equal(payment.status, "PAID");
+      assert.ok(payment.paidAt, "paidAt harus terisi");
+      assert.equal(Number(payment.amount), 50_000);
+      assert.equal(payment.bankName, driverUser.bankName);
+      assert.equal(payment.accountNumber, driverUser.accountNumber);
     });
 
     it("menolak metode pembayaran yang tidak dikenal", async () => {
@@ -241,70 +287,55 @@ describe("RODAKU - verifikasi fitur", { concurrency: false }, () => {
         customerId: userId,
         driverId: driver.driverId,
         fare: 20_000,
+        status: "AWAITING_PAYMENT",
       });
 
       const res = await client.post(`/api/orders/${trip.id}/pay`, { method: "BITCOIN" });
       assert.equal(res.status, 400);
       assert.equal(res.body.error, "VALIDATION_FAILED");
     });
+
+    it("menolak BANK_TRANSFER sebelum perjalanan selesai", async () => {
+      const { client, userId } = await registerCustomer("transfer-awal");
+      const driver = await seedDriver(db, "transfer-awal");
+      const trip = await seedOrder(db, {
+        customerId: userId,
+        driverId: driver.driverId,
+        fare: 15_000,
+        status: "SEARCHING",
+      });
+
+      const res = await client.post<PayBody>(`/api/orders/${trip.id}/pay`, {
+        method: "BANK_TRANSFER",
+      });
+      assert.equal(res.status, 409);
+      assert.equal(res.body.error, "INVALID_STATE");
+    });
   });
 
   // ------------------------------------------------------------------
-  // Skenario 3 - Top-up akurat
+  // Skenario 3 - Endpoint dompet lama dinonaktifkan (410)
   // ------------------------------------------------------------------
-  describe("3. Top-up dompet", () => {
-    it("menambah saldo tepat sesuai nominal", async () => {
-      const { client, userId } = await registerCustomer("topup");
-      let expected = WELCOME_BALANCE;
+  describe("3. Endpoint wallet / QRIS dinonaktifkan", () => {
+    it("wallet, topup, withdraw, dan QRIS mengembalikan 410", async () => {
+      const { client } = await registerCustomer("stub");
 
-      for (const amount of TOPUP_OPTIONS) {
-        const res = await client.post<WalletBody>("/api/wallet/topup", { amount });
-        assert.equal(res.status, 200, `top-up ${amount} gagal`);
-        expected += amount;
-        assert.equal(
-          res.body.wallet.balance,
-          expected,
-          `saldo harus ${expected} setelah top-up ${amount}`,
+      const routes: { method: "GET" | "POST"; path: string }[] = [
+        { method: "GET", path: "/api/wallet" },
+        { method: "POST", path: "/api/wallet/topup" },
+        { method: "POST", path: "/api/driver/withdraw" },
+        { method: "POST", path: "/api/payment/qris" },
+        { method: "POST", path: "/api/payment/qris/verify" },
+        { method: "POST", path: "/api/payment/qris/webhook" },
+      ];
+
+      for (const { method, path } of routes) {
+        const res = await client.request(method, path, { amount: 20_000 });
+        assert.ok(
+          res.status === 410 || res.status === 404,
+          `${path} harus 410/404, dapat ${res.status}`,
         );
       }
-
-      const wallet = await db.wallet.findUniqueOrThrow({
-        where: { userId },
-        include: { transactions: true },
-      });
-      assert.equal(Number(wallet.balance.toString()), expected);
-
-      // Endpoint hanya mengembalikan 5 mutasi terakhir; wallet ini punya 3.
-      const res = await client.get<WalletBody>("/api/wallet");
-      assert.equal(res.body.wallet.transactions.length, TOPUP_OPTIONS.length);
-      assert.ok(res.body.wallet.transactions.length <= 5);
-      assert.equal(res.body.wallet.transactions[0].type, "TOPUP");
-      assert.equal(res.body.wallet.transactions[0].amount, TOPUP_OPTIONS[2]);
-      assert.match(res.body.wallet.transactions[0].description, /Top-up RodaPay/);
-      assert.deepEqual(
-        res.body.wallet.transactions.map((t) => t.amount),
-        [...TOPUP_OPTIONS].reverse(),
-        "mutasi terbaru harus tampil lebih dulu",
-      );
-
-      assert.equal(
-        wallet.transactions.length,
-        3,
-        "harus ada tepat satu mutasi per top-up",
-      );
-    });
-
-    it("menolak nominal di luar daftar dan tidak mengubah saldo", async () => {
-      const { client } = await registerCustomer("topup-invalid");
-
-      for (const amount of [1_234, 0, -50_000, 150_000, "abc", null]) {
-        const res = await client.post("/api/wallet/topup", { amount });
-        assert.equal(res.status, 400, `nominal ${String(amount)} harus ditolak`);
-        assert.equal(res.body.error, "VALIDATION_FAILED");
-      }
-
-      const wallet = await client.get<WalletBody>("/api/wallet");
-      assert.equal(wallet.body.wallet.balance, WELCOME_BALANCE);
     });
   });
 
@@ -316,7 +347,6 @@ describe("RODAKU - verifikasi fitur", { concurrency: false }, () => {
       const { client, userId } = await registerCustomer("lewati-ulasan");
       const driver = await seedDriver(db, "lewati");
 
-      // Bangun riwayat ulasan nyata: 4, 5, 5 -> rata-rata 4.67 dari 3 ulasan.
       for (const rating of [4, 5, 5]) {
         const history = await seedOrder(db, {
           customerId: userId,
@@ -333,8 +363,6 @@ describe("RODAKU - verifikasi fitur", { concurrency: false }, () => {
       assert.equal(baseline.ratingAvg, 4.67);
       assert.equal(baseline.totalTrips, 3);
 
-      // Perilaku tombol "Lewati Ulasan": bayar, lalu jangan pernah memanggil
-      // /review karena tidak ada bintang yang dipilih.
       const skipped = await seedOrder(db, {
         customerId: userId,
         driverId: driver.driverId,
@@ -354,19 +382,9 @@ describe("RODAKU - verifikasi fitur", { concurrency: false }, () => {
       const afterSkip = await db.driver.findUniqueOrThrow({
         where: { id: driver.driverId },
       });
-      assert.equal(
-        afterSkip.ratingAvg,
-        baseline.ratingAvg,
-        "rating rata-rata tidak boleh berubah",
-      );
-      assert.equal(
-        afterSkip.totalTrips,
-        baseline.totalTrips,
-        "jumlah ulasan tidak boleh bertambah",
-      );
+      assert.equal(afterSkip.ratingAvg, baseline.ratingAvg);
+      assert.equal(afterSkip.totalTrips, baseline.totalTrips);
 
-      // Bandingkan dengan alur "Kirim Ulasan & Selesai" pada perjalanan lain:
-      // satu ulasan 5 bintang menaikkan rata-rata ke 4.75.
       const rated = await seedOrder(db, {
         customerId: userId,
         driverId: driver.driverId,
@@ -404,7 +422,6 @@ describe("RODAKU - verifikasi fitur", { concurrency: false }, () => {
         fare: 15_000,
       });
 
-      // `null` dikonversi menjadi 0 oleh Number(), jadi tetap ditolak.
       for (const rating of [0, 6, -1, 2.5, "abc", null]) {
         const res = await client.post(`/api/orders/${trip.id}/review`, { rating });
         assert.equal(res.status, 400, `rating ${String(rating)} harus ditolak`);
@@ -416,7 +433,7 @@ describe("RODAKU - verifikasi fitur", { concurrency: false }, () => {
   });
 
   // ------------------------------------------------------------------
-  // Antrean tagihan tertunggak
+  // Skenario 5 - Antrean tagihan tertunggak
   // ------------------------------------------------------------------
   describe("5. Antrean tagihan tertunggak", () => {
     it("mengembalikan seluruh antrean terurut lama ke baru", async () => {
@@ -445,7 +462,6 @@ describe("RODAKU - verifikasi fitur", { concurrency: false }, () => {
       assert.equal(queueBadge(0, 2)?.text, "Tagihan 1 dari 2");
       assert.equal(queueBadge(0, 1), null);
 
-      // Menuntaskan tagihan pertama langsung memantulkan antrean berikutnya.
       await client.post(`/api/orders/${oldest.id}/pay`, { method: "CASH" });
 
       const afterFirst = await client.get<OrdersBody>("/api/orders?limit=20");
@@ -529,7 +545,6 @@ describe("RODAKU - verifikasi fitur", { concurrency: false }, () => {
         "timestamp harus diisi server",
       );
 
-      // Balasan driver sampai ke pelanggan.
       const reply = waitForEvent<{ text: string; senderRole: string }>(
         customer,
         "chat:incoming",
@@ -545,7 +560,6 @@ describe("RODAKU - verifikasi fitur", { concurrency: false }, () => {
       });
       assert.equal((await reply).senderRole, "DRIVER");
 
-      // Klien di room lain tidak boleh hear.
       await expectNoEvent(bystander, "chat:incoming");
     });
 
@@ -591,7 +605,6 @@ describe("RODAKU - verifikasi fitur", { concurrency: false }, () => {
 
       await expectNoEvent(listener, "chat:incoming");
 
-      // Pesan yang sah tetap lolos setelah payload buruk.
       const ok = waitForEvent<{ text: string }>(listener, "chat:incoming");
       listener.emit("chat:message", {
         orderId: trip.id,
@@ -616,12 +629,6 @@ describe("RODAKU - verifikasi fitur", { concurrency: false }, () => {
         });
         assert.equal(res.status, 200, `${route} harus 200`);
       }
-    });
-
-    it("endpoint dompet menolak klien tanpa sesi", async () => {
-      const anon = new TestClient("anon-wallet");
-      const res: ApiResponse = await anon.post("/api/wallet/topup", { amount: 20_000 });
-      assert.equal(res.status, 401);
     });
   });
 });

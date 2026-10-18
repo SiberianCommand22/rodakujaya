@@ -3,13 +3,14 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { createSession, hashPassword, publicUser, setSessionCookie } from "@/lib/auth";
 import { authLimiter, rateLimitResponse } from "@/lib/rateLimit";
-import { WELCOME_BALANCE } from "@/lib/wallet";
+import { INDONESIAN_BANKS } from "@/lib/walletContract";
 import { isValidPlateNumber, normalizePlateNumber } from "@/lib/utils";
 
 type FieldErrors = Record<string, string>;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const PHONE_RE = /^(\+62|62|0)[0-9]{8,14}$/;
+const ACCOUNT_NUMBER_RE = /^[0-9]{6,20}$/;
 
 function readString(value: unknown, max = 120): string | null {
   if (typeof value !== "string") return null;
@@ -52,12 +53,22 @@ export async function POST(request: Request) {
     const vehicleType = raw.vehicleType === "RODA_MOBIL" ? "RODA_MOBIL" : "RODA_MOTOR";
     const vehicleBrand = readString(raw.vehicleBrand, 60);
 
+    // Rekening bank untuk menerima transfer P2P — wajib untuk semua role.
+    const bankName = readString(raw.bankName, 60);
+    const accountNumber = readString(raw.accountNumber, 20);
+    const accountHolderName = readString(raw.accountHolderName, 100);
+
     const errors: FieldErrors = {};
     if (!name) errors.name = "Nama wajib diisi.";
     if (!email || !EMAIL_RE.test(email)) errors.email = "Alamat email tidak valid.";
     if (!phone || !PHONE_RE.test(phone.replace(/[\s-]/g, "")))
       errors.phone = "Nomor telepon Indonesia tidak valid (contoh: 081234567890).";
     if (password.length < 8) errors.password = "Password minimal 8 karakter.";
+    if (!bankName || !(INDONESIAN_BANKS as readonly string[]).includes(bankName))
+      errors.bankName = "Pilih nama bank dari daftar.";
+    if (!accountNumber || !ACCOUNT_NUMBER_RE.test(accountNumber.replace(/[\s-]/g, "")))
+      errors.accountNumber = "Nomor rekening 6–20 digit angka.";
+    if (!accountHolderName) errors.accountHolderName = "Nama pemilik rekening wajib diisi.";
     if (role === "DRIVER") {
       if (!vehiclePlate || !isValidPlateNumber(vehiclePlate))
         errors.vehiclePlate =
@@ -84,9 +95,6 @@ export async function POST(request: Request) {
     }
 
     try {
-      // Buat user dulu, lalu wallet + driver secara terpisah agar tidak
-      // memicu error relasi nested-write Prisma. Wallet selalu dibuat dengan
-      // saldo sambutan Rp 100.000.
       const created = await db.user.create({
         data: {
           name: name!,
@@ -94,13 +102,10 @@ export async function POST(request: Request) {
           phone,
           password: hashPassword(password),
           role,
+          bankName: bankName!,
+          accountNumber: accountNumber!.replace(/[\s-]/g, ""),
+          accountHolderName: accountHolderName!,
         },
-      });
-
-      await db.wallet.upsert({
-        where: { userId: created.id },
-        update: {},
-        create: { userId: created.id, balance: new Prisma.Decimal(WELCOME_BALANCE) },
       });
 
       let driverRow: { id: string; plateNumber: string; vehicleType: string; vehicleBrand: string | null; isOnline: boolean; isBlocked: boolean } | null = null;
@@ -129,6 +134,9 @@ export async function POST(request: Request) {
             phone: created.phone,
             googleId: created.googleId ?? null,
             avatar: created.avatar ?? null,
+            bankName: created.bankName,
+            accountNumber: created.accountNumber,
+            accountHolderName: created.accountHolderName,
             driver: driverRow
               ? {
                   id: driverRow.id,

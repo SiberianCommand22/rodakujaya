@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import RodakuLogo from "@/components/RodakuLogo";
+import { INDONESIAN_BANKS } from "@/lib/walletContract";
 
 function GoogleGIcon() {
   return (
@@ -73,6 +74,9 @@ export type AuthUser = {
   phone: string | null;
   googleId?: string | null;
   avatar?: string | null;
+  bankName?: string | null;
+  accountNumber?: string | null;
+  accountHolderName?: string | null;
   driver: {
     id: string;
     plateNumber: string;
@@ -105,6 +109,9 @@ const EMPTY = {
   vehiclePlate: "",
   vehicleType: "RODA_MOTOR",
   vehicleBrand: "",
+  bankName: "",
+  accountNumber: "",
+  accountHolderName: "",
 };
 
 const VEHICLE_OPTIONS = [
@@ -405,6 +412,68 @@ export default function AuthPanel({ onAuthenticated, initialRole }: AuthPanelPro
                 className="rounded-xl border border-blue-100 bg-white px-3 py-2 text-sm outline-none focus:border-[#1D4ED8] focus:ring-2 focus:ring-[#1D4ED8]/20"
               />
             ))}
+            {/* Data rekening bank — wajib untuk alur pembayaran P2P */}
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3">
+              <p className="mb-2 text-[11px] font-black uppercase tracking-wide text-emerald-700">
+                🏦 Rekening Bank
+              </p>
+              <p className="mb-2 text-[11px] text-emerald-800/70">
+                {roleTab === "DRIVER"
+                  ? "Pelanggan akan mentransfer langsung ke rekening ini setelah perjalanan."
+                  : "Rekening Anda untuk menerima refund / pencairan bila diperlukan."}
+              </p>
+              <div className="mb-2 flex flex-col gap-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+                  Nama Bank
+                </span>
+                <select
+                  value={form.bankName}
+                  onChange={(e) => update("bankName", e.target.value)}
+                  className="rounded-xl border border-emerald-100 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20"
+                >
+                  <option value="">Pilih bank…</option>
+                  {INDONESIAN_BANKS.map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors.bankName && (
+                  <span className="text-[11px] text-red-600">{fieldErrors.bankName}</span>
+                )}
+              </div>
+              <div className="mb-2 flex flex-col gap-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+                  Nomor Rekening
+                </span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="1234567890"
+                  value={form.accountNumber}
+                  onChange={(e) => update("accountNumber", e.target.value.replace(/\D/g, ""))}
+                  className="rounded-xl border border-emerald-100 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20"
+                />
+                {fieldErrors.accountNumber && (
+                  <span className="text-[11px] text-red-600">{fieldErrors.accountNumber}</span>
+                )}
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+                  Nama Pemilik Rekening
+                </span>
+                <input
+                  type="text"
+                  placeholder="Sesuai buku tabungan"
+                  value={form.accountHolderName}
+                  onChange={(e) => update("accountHolderName", e.target.value)}
+                  className="rounded-xl border border-emerald-100 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20"
+                />
+                {fieldErrors.accountHolderName && (
+                  <span className="text-[11px] text-red-600">{fieldErrors.accountHolderName}</span>
+                )}
+              </div>
+            </div>
             {roleTab === "DRIVER" && (
               <div className="rounded-2xl border border-blue-100 bg-[#EFF6FF]/60 p-3">
                 <p className="mb-2 text-[11px] font-black uppercase tracking-wide text-[#1D4ED8]">
