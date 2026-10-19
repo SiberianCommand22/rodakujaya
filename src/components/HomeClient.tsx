@@ -21,6 +21,7 @@ import { SOCKET_EVENTS, getSocket } from "@/lib/socket";
 import { reverseGeocode } from "@/lib/geocode";
 import { nextQueueIndex } from "@/lib/tripSettlement";
 import { type LatLng, type OrderStatus, type Place, type VehicleType } from "@/lib/utils";
+import type { MapRef } from "@/components/Map";
 
 const Map = dynamic(() => import("@/components/Map"), {
   ssr: false,
@@ -66,6 +67,7 @@ export default function HomeClient({
   const [sheetExpanded, setSheetExpanded] = useState(true);
   const [sheetHeight, setSheetHeight] = useState<number | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const mapRef = useRef<MapRef | null>(null);
 
   const [quote, setQuote] = useState<RouteQuote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
@@ -344,10 +346,16 @@ export default function HomeClient({
   function applyPickup(place: Place | null) {
     setPickup(place);
     if (!place) clearQuote();
+    else if (place.lat && place.lng) {
+      mapRef.current?.flyTo({ lat: place.lat, lng: place.lng }, 16, 0.8);
+    }
   }
   function applyDropoff(place: Place | null) {
     setDropoff(place);
     if (!place) clearQuote();
+    else if (place.lat && place.lng) {
+      mapRef.current?.flyTo({ lat: place.lat, lng: place.lng }, 16, 0.8);
+    }
   }
 
   /**
@@ -529,10 +537,12 @@ export default function HomeClient({
   // ── Mode aplikasi pemesanan (peta + bottom sheet) ────────────────────────
   if (showApp && user) {
     return (
-      <div className="relative h-[100dvh] w-full overflow-hidden bg-[#EFF6FF]">
+      <div className="relative h-[100dvh] w-full overflow-hidden bg-[#EFF6FF]" style={{ touchAction: "pan-x pan-y" }}>
         {/* Peta utama memenuhi 100% viewport sebagai kanvas latar */}
-        <div className="absolute inset-0 h-[100dvh] w-full">
+        <div className="absolute inset-0 h-[100dvh] w-full" style={{ touchAction: "pan-x pan-y" }}>
           <Map
+            ref={mapRef}
+            onMapReady={(ref) => { mapRef.current = ref; }}
             pickup={pickup}
             dropoff={dropoff}
             driver={driverPoint}

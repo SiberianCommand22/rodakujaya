@@ -13,8 +13,13 @@ import {
   useMap,
   useMapEvents,
 } from "react-leaflet";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from "react";
 import { DEFAULT_CENTER, DEFAULT_ZOOM, type LatLng, type VehicleType } from "@/lib/utils";
+
+export type MapRef = {
+  flyTo: (point: LatLng, zoom?: number, duration?: number) => void;
+  panTo: (point: LatLng, duration?: number) => void;
+};
 
 type MapProps = {
   pickup: LatLng | null;
@@ -36,6 +41,8 @@ type MapProps = {
   pickMode?: boolean;
   /** Dipanggil saat peta berhenti digeser dalam mode pilih-titik. */
   onPickCenter?: (point: LatLng) => void;
+  /** Dipanggil saat peta siap, memberikan akses ke flyTo/panTo. */
+  onMapReady?: (ref: MapRef) => void;
 };
 
 /**
@@ -377,26 +384,60 @@ function MobileMapConfig({ isMobile }: { isMobile: boolean }) {
   const map = useMap();
   useEffect(() => {
     if (!isMobile) return;
-    // Nonaktifkan tap handler Leaflet di mobile untuk mencegah bug double-click
-    // dan interferensi dengan scroll/gesture native browser.
     (map as any).tap?.disable?.();
     (map as any).tapTolerance = 16;
   }, [map, isMobile]);
   return null;
 }
 
-export default function Map({
-  pickup,
-  dropoff,
-  driver,
-  vehicleType = "RODA_MOTOR",
-  heading = null,
-  onPickPoint,
-  route,
-  followDriver = false,
-  pickMode = false,
-  onPickCenter,
-}: MapProps) {
+function MapReadyHandler({ onReady }: { onReady: (map: L.Map) => void }) {
+  const map = useMap();
+  useEffect(() => {
+    onReady(map);
+  }, [map, onReady]);
+  return null;
+}
+
+const MapComponent = forwardRef<MapRef, MapProps>((props, ref) => {
+  const mapInstance = useRef<L.Map | null>(null);
+  const {
+    pickup,
+    dropoff,
+    driver,
+    vehicleType = "RODA_MOTOR",
+    heading = null,
+    onPickPoint,
+    route,
+    followDriver = false,
+    pickMode = false,
+    onPickCenter,
+    onMapReady,
+  } = props;
+
+  // Expose flyTo/panTo to parent via ref
+  useImperativeHandle(ref, () => ({
+    flyTo: (point: LatLng, zoom = 15, duration = 0.8) => {
+      mapInstance.current?.flyTo([point.lat, point.lng], zoom, { animate: true, duration });
+    },
+    panTo: (point: LatLng, duration = 0.6) => {
+      mapInstance.current?.panTo([point.lat, point.lng], { animate: true, duration });
+    },
+  }));
+
+  // Notify parent when map is ready
+  useEffect(() => {
+    if (mapInstance.current && onMapReady) {
+      onMapReady({
+        flyTo: (point: LatLng, zoom = 15, duration = 0.8) => {
+          mapInstance.current?.flyTo([point.lat, point.lng], zoom, { animate: true, duration });
+        },
+        panTo: (point: LatLng, duration = 0.6) => {
+          mapInstance.current?.panTo([point.lat, point.lng], { animate: true, duration });
+        },
+      });
+    }
+  }, [onMapReady]);
+
   // Prefer the server road route; fall back to a straight line while the
   // routing request is still in flight or if it failed.
   const activeRoute = useMemo<[number, number][]>(() => {
@@ -438,7 +479,13 @@ export default function Map({
         scrollWheelZoom
         zoomControl={false}
       >
-        <MobileMapConfig isMobile={isMobile} />
+        <MapReadyHandler onReady={(map) => {
+          mapInstance.current = map;
+          if (isMobile) {
+            (map as any).tap?.disable?.();
+            (map as any).tapTolerance = 16;
+          }
+        }} />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -484,7 +531,11 @@ export default function Map({
       </MapContainer>
     </>
   );
-}
+});
+
+MapComponent.displayName = "Map";
+
+export default MapComponent;
 
 const RODAKU_MAP_CSS = `
   .rodaku-map { background: #e8eef7; }

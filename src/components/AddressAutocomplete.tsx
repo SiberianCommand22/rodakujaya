@@ -2,6 +2,11 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import type { LatLng } from "@/lib/utils";
+import {
+  BOGOR_TRAINING_LOCATIONS,
+  searchBogorLocations,
+  type BogorLocation,
+} from "@/lib/bogorLocations";
 
 export type SearchSuggestion = {
   id: string;
@@ -10,7 +15,7 @@ export type SearchSuggestion = {
   displayName: string;
   lat: number;
   lng: number;
-  source: "local" | "nominatim" | "photon";
+  source: "local" | "nominatim" | "photon" | "training";
 };
 
 type AddressAutocompleteProps = {
@@ -24,9 +29,21 @@ type AddressAutocompleteProps = {
   disabled?: boolean;
 };
 
-const DEBOUNCE_MS = 450;
+const DEBOUNCE_MS = 500;
 const MIN_QUERY_LENGTH = 2;
 const MAX_SUGGESTIONS = 5;
+
+function bogorToSuggestion(loc: BogorLocation): SearchSuggestion {
+  return {
+    id: `training-${loc.id}`,
+    title: loc.label,
+    subtitle: loc.address,
+    displayName: loc.address,
+    lat: loc.lat,
+    lng: loc.lng,
+    source: "training",
+  };
+}
 
 export default function AddressAutocomplete({
   label,
@@ -38,15 +55,13 @@ export default function AddressAutocomplete({
   accent = "primary",
   disabled = false,
 }: AddressAutocompleteProps) {
-  // The parent passes a `key` derived from the address, so when GPS or a map tap
-  // replaces the location this component remounts with the new text. That avoids
-  // an effect that would synchronise props into state on every change.
   const [query, setQuery] = useState(address ?? "");
   const [results, setResults] = useState<SearchSuggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [highlight, setHighlight] = useState(0);
+  const [showTrainingChips, setShowTrainingChips] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const lockedRef = useRef(false);
 
@@ -56,6 +71,7 @@ export default function AddressAutocomplete({
     lockedRef.current = false;
     setQuery(next);
     setError(null);
+    setShowTrainingChips(next.trim().length === 0);
     if (next.trim().length < MIN_QUERY_LENGTH) {
       setResults([]);
       setOpen(false);
@@ -68,6 +84,7 @@ export default function AddressAutocomplete({
     setResults([]);
     setOpen(false);
     setError(null);
+    setShowTrainingChips(true);
     onClear?.();
   }
 
@@ -76,11 +93,20 @@ export default function AddressAutocomplete({
     onSelect({ lat: result.lat, lng: result.lng }, result.displayName);
     setOpen(false);
     setResults([]);
+    setShowTrainingChips(false);
     setQuery(result.displayName);
   }
 
-  // Auto-select cerdas: tanpa klik dropdown pun koordinat selalu terkunci ke
-  // rekomendasi teratas — tombol Pesan tidak pernah gagal karena lat/lng kosong.
+  function selectTrainingLocation(loc: BogorLocation) {
+    lockedRef.current = true;
+    const { lat, lng, address: addr } = loc;
+    onSelect({ lat, lng }, addr);
+    setOpen(false);
+    setResults([]);
+    setShowTrainingChips(false);
+    setQuery(addr);
+  }
+
   function autoLock() {
     if (lockedRef.current || results.length === 0) return;
     choose(results[highlight] ?? results[0]);
@@ -89,27 +115,45 @@ export default function AddressAutocomplete({
   useEffect(() => {
     const trimmed = query.trim();
     if (trimmed.length < MIN_QUERY_LENGTH || lockedRef.current) return;
+    setShowTrainingChips(false);
 
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       setLoading(true);
       setError(null);
       try {
+        // Prioritaskan pencarian lokal (titik latihan Bogor)
+        const localMatches = searchBogorLocations(trimmed, 3).map(bogorToSuggestion);
+
         const res = await fetch(`/api/geocode?q=${encodeURIComponent(trimmed)}`, {
           signal: controller.signal,
         });
         if (!res.ok) throw new Error(`Geocode HTTP ${res.status}`);
         const data = (await res.json()) as { suggestions?: SearchSuggestion[] };
-        const list = Array.isArray(data.suggestions) ? data.suggestions : [];
-        // Batasi maksimal 4-5 hasil untuk render ringan
-        setResults(list.slice(0, MAX_SUGGESTIONS));
+        const apiList = Array.isArray(data.suggestions) ? data.suggestions : [];
+
+        // Gabungkan: lokal dulu, lalu API, hapus duplikat by coordinate
+        const seen = new Set<string>();
+        const merged: SearchSuggestion[] = [];
+        for (const s of [...localMatches, ...apiList]) {
+          const key = `${s.lat.toFixed(4)},${s.lng.toFixed(4)}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          merged.push(s);
+          if (merged.length >= MAX_SUGGESTIONS) break;
+        }
+
+        setResults(merged);
         setHighlight(0);
         setOpen(true);
       } catch (err) {
         if ((err as Error).name === "AbortError") return;
-        setResults([]);
-        setError("Gagal mencari alamat. Coba lagi.");
+        // Fallback ke lokal saja jika API gagal
+        const localMatches = searchBogorLocations(trimmed, MAX_SUGGESTIONS).map(bogorToSuggestion);
+        setResults(localMatches);
+        setHighlight(0);
         setOpen(true);
+        setError(localMatches.length === 0 ? "Gagal mencari alamat. Coba lagi." : null);
       } finally {
         setLoading(false);
       }
@@ -125,7 +169,6 @@ export default function AddressAutocomplete({
     function handleOutside(event: MouseEvent) {
       if (!containerRef.current?.contains(event.target as Node)) {
         setOpen(false);
-        // Klik di luar = selesai mengetik → kunci rekomendasi teratas.
         autoLock();
       }
     }
@@ -136,8 +179,6 @@ export default function AddressAutocomplete({
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter") {
-      // Enter selalu mengunci: hasil sorotan bila dropdown terbuka,
-      // atau hasil pertama bila sudah ada.
       if (results.length > 0) {
         event.preventDefault();
         const target = open ? (results[highlight] ?? results[0]) : results[0];
@@ -157,7 +198,6 @@ export default function AddressAutocomplete({
     }
   }
 
-  // Jemput = pin hijau bulat, Tujuan = pin merah (ala Gojek).
   const accentRing =
     accent === "success"
       ? "focus-within:border-red-200 focus-within:ring-red-200/60"
@@ -197,7 +237,10 @@ export default function AddressAutocomplete({
               setOpen(false);
               autoLock();
             }}
-            onFocus={() => results.length > 0 && setOpen(true)}
+            onFocus={() => {
+              setShowTrainingChips(true);
+              if (results.length > 0) setOpen(true);
+            }}
             autoComplete="off"
             role="combobox"
             aria-expanded={open}
@@ -221,6 +264,21 @@ export default function AddressAutocomplete({
           </button>
         )}
       </div>
+
+      {showTrainingChips && !disabled && (
+        <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Titik latihan cepat">
+          {BOGOR_TRAINING_LOCATIONS.slice(0, 6).map((loc) => (
+            <button
+              key={loc.id}
+              type="button"
+              onClick={() => selectTrainingLocation(loc)}
+              className="rounded-full bg-white/90 px-3 py-1.5 text-[11px] font-medium text-[#1D4ED8] shadow-sm ring-1 ring-blue-100 transition hover:bg-[#EFF6FF] hover:shadow-md disabled:opacity-60 min-h-[40px]"
+            >
+              🏷️ {loc.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {open && (results.length > 0 || error) && (
         <ul
@@ -247,11 +305,13 @@ export default function AddressAutocomplete({
                   className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs shadow-sm ${
                     accent === "success"
                       ? "bg-red-100 text-red-600"
+                      : result.source === "training"
+                      ? "bg-emerald-100 text-emerald-600"
                       : "bg-blue-100 text-[#1D4ED8]"
                   }`}
                   aria-hidden
                 >
-                  📍
+                  {result.source === "training" ? "🏷️" : "📍"}
                 </span>
                 <span className="min-w-0 flex-1 leading-snug">
                   <span className="block truncate text-[13px] font-bold text-[#0F172A]">
