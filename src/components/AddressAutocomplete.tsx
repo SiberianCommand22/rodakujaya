@@ -27,6 +27,8 @@ type AddressAutocompleteProps = {
   onClear?: () => void;
   accent?: "primary" | "success";
   disabled?: boolean;
+  /** Force show training chips (useful on mobile for quick access) */
+  showTrainingChipsDefault?: boolean;
 };
 
 const DEBOUNCE_MS = 500;
@@ -54,6 +56,7 @@ export default function AddressAutocomplete({
   onClear,
   accent = "primary",
   disabled = false,
+  showTrainingChipsDefault = false,
 }: AddressAutocompleteProps) {
   const [query, setQuery] = useState(address ?? "");
   const [results, setResults] = useState<SearchSuggestion[]>([]);
@@ -61,17 +64,32 @@ export default function AddressAutocomplete({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [highlight, setHighlight] = useState(0);
-  const [showTrainingChips, setShowTrainingChips] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const lockedRef = useRef(false);
 
   const listId = useId();
 
+  // On mobile, show training chips by default when input is empty (not focused)
+  const [showTrainingChips, setShowTrainingChips] = useState(() =>
+    showTrainingChipsDefault || (typeof window !== "undefined" && window.innerWidth < 768 && !address?.trim())
+  );
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
   function handleChange(next: string) {
     lockedRef.current = false;
     setQuery(next);
     setError(null);
-    setShowTrainingChips(next.trim().length === 0);
+    // Hide chips when typing (both mobile and desktop unless forced)
+    if (!showTrainingChipsDefault) {
+      setShowTrainingChips(next.trim().length === 0);
+    }
     if (next.trim().length < MIN_QUERY_LENGTH) {
       setResults([]);
       setOpen(false);
@@ -238,7 +256,8 @@ export default function AddressAutocomplete({
               autoLock();
             }}
             onFocus={() => {
-              setShowTrainingChips(true);
+              // On mobile, chips already show by default when empty; only force show on desktop
+              if (!isMobile) setShowTrainingChips(true);
               if (results.length > 0) setOpen(true);
             }}
             autoComplete="off"

@@ -21,6 +21,7 @@ import { SOCKET_EVENTS, getSocket } from "@/lib/socket";
 import { reverseGeocode } from "@/lib/geocode";
 import { nextQueueIndex } from "@/lib/tripSettlement";
 import { type LatLng, type OrderStatus, type Place, type VehicleType } from "@/lib/utils";
+import { BOGOR_TRAINING_LOCATIONS, type BogorLocation } from "@/lib/bogorLocations";
 import type { MapRef } from "@/components/Map";
 
 const Map = dynamic(() => import("@/components/Map"), {
@@ -65,8 +66,8 @@ export default function HomeClient({
   const [pickLabel, setPickLabel] = useState<string | null>(null);
   const pickBusyRef = useRef(false);
   const [sheetExpanded, setSheetExpanded] = useState(true);
-  const [sheetHeight, setSheetHeight] = useState<number | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [showTrainingLocations, setShowTrainingLocations] = useState(false);
   const mapRef = useRef<MapRef | null>(null);
 
   const [quote, setQuote] = useState<RouteQuote | null>(null);
@@ -89,6 +90,25 @@ export default function HomeClient({
     window.addEventListener("resize", checkMobile);
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
+
+  // Handle virtual keyboard on mobile to prevent bottom sheet from being covered
+  useEffect(() => {
+    if (!isMobile || !sheetExpanded) return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    const handleResize = () => {
+      // visualViewport.height changes when keyboard opens/closes
+      // We don't need to do anything special as the bottom sheet is positioned
+      // with fixed bottom and the browser handles the layout
+    };
+    vv.addEventListener("resize", handleResize);
+    vv.addEventListener("scroll", handleResize);
+    return () => {
+      vv.removeEventListener("resize", handleResize);
+      vv.removeEventListener("scroll", handleResize);
+    };
+  }, [isMobile, sheetExpanded]);
 
   useEffect(() => {
     if (!pickup || !dropoff) return;
@@ -594,6 +614,15 @@ export default function HomeClient({
             >
               ← Beranda
             </button>
+            {/* Quick access to training locations on mobile */}
+            <button
+              type="button"
+              onClick={() => setShowTrainingLocations(true)}
+              className="hidden md:flex items-center gap-1.5 rounded-2xl bg-white/95 px-3 py-3 text-xs font-black text-[#1D4ED8] shadow-xl backdrop-blur transition hover:bg-[#EFF6FF] min-h-[48px]"
+              aria-label="Titik latihan Bogor"
+            >
+              🏷️ Titik Latihan
+            </button>
             <div className="ml-auto flex items-center gap-2">
               <button
                 type="button"
@@ -663,16 +692,14 @@ export default function HomeClient({
               : "md:inset-x-auto md:bottom-6 md:left-6 md:top-6 md:flex md:w-full md:max-w-[420px]"
           }`}
           style={isMobile ? { transform: sheetExpanded ? "translateY(0)" : "translateY(calc(100% - 72px))" } : undefined}
-        >
+>
           <div
             className={`mx-auto flex w-full max-w-2xl flex-col overflow-hidden rounded-t-[28px] border border-blue-50/50 bg-white/95 shadow-[0_-12px_40px_rgba(15,23,42,0.25)] backdrop-blur-md transition-all duration-300 ${
               isMobile
                 ? "max-h-[85dvh] rounded-t-3xl"
                 : "max-h-[92vh] md:w-full md:max-w-[420px] md:rounded-3xl md:shadow-2xl"
             }`}
-            ref={(el) => {
-              if (el && isMobile) setSheetHeight(el.offsetHeight);
-            }}
+            style={isMobile ? { overscrollBehavior: "contain" } : undefined}
           >
             <div className="border-b border-slate-100 px-4 pb-2 pt-2 md:px-5 md:pt-4">
               <div className="flex items-center gap-2">
@@ -702,6 +729,7 @@ export default function HomeClient({
               className={`min-h-0 overflow-y-auto px-4 pb-5 pt-3 md:px-5 ${
                 sheetExpanded ? "flex-1" : "hidden md:block md:flex-1"
               }`}
+              style={isMobile ? { overscrollBehavior: "contain" } : undefined}
             >
               {shareNote && (
                 <p className="mb-2 rounded-2xl bg-emerald-50 px-3 py-2 text-[11px] font-bold text-emerald-700" role="status">
@@ -802,6 +830,62 @@ export default function HomeClient({
         />
 
         <OrderHistoryDrawer open={historyOpen} onClose={() => setHistoryOpen(false)} />
+
+        {/* Modal Titik Latihan Bogor */}
+        {showTrainingLocations && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Pilih Titik Latihan Bogor"
+            className="fixed inset-0 z-[3000] flex items-end justify-center bg-[#0F172A]/60 p-4 backdrop-blur-sm"
+            onClick={() => setShowTrainingLocations(false)}
+          >
+            <div
+              className="w-full max-w-sm rounded-t-3xl bg-white p-5 shadow-2xl max-h-[70dvh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-black text-[#0F172A]">🏷️ Titik Latihan Bogor</h2>
+                <button
+                  type="button"
+                  onClick={() => setShowTrainingLocations(false)}
+                  aria-label="Tutup"
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition hover:bg-slate-200"
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="mb-3 text-[11px] text-slate-500">Klik untuk mengisi titik jemput/tujuan langsung</p>
+              <div className="flex flex-col gap-2">
+                {BOGOR_TRAINING_LOCATIONS.map((loc: BogorLocation) => (
+                  <button
+                    key={loc.id}
+                    type="button"
+                    onClick={() => {
+                      const target = !pickup ? "pickup" : !dropoff ? "dropoff" : pendingTarget;
+                      const place = { lat: loc.lat, lng: loc.lng, address: loc.address };
+                      if (target === "pickup") {
+                        applyPickup(place);
+                        setPendingTarget("dropoff");
+                      } else {
+                        applyDropoff(place);
+                      }
+                      setShowTrainingLocations(false);
+                      mapRef.current?.flyTo({ lat: loc.lat, lng: loc.lng }, 16, 0.8);
+                    }}
+                    className="flex items-start gap-3 rounded-2xl bg-white px-3 py-3 text-left border border-slate-100 shadow-sm transition hover:bg-[#EFF6FF] hover:shadow-md min-h-[48px]"
+                  >
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 shadow-sm">🏷️</span>
+                    <div className="min-w-0 flex-1 leading-snug">
+                      <span className="block truncate text-[13px] font-bold text-[#0F172A]">{loc.label}</span>
+                      <span className="block truncate text-[11px] font-normal text-slate-500">{loc.address}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

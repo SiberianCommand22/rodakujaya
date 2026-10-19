@@ -380,21 +380,36 @@ function CenterPin({
   );
 }
 
-function MobileMapConfig({ isMobile }: { isMobile: boolean }) {
-  const map = useMap();
-  useEffect(() => {
-    if (!isMobile) return;
-    (map as any).tap?.disable?.();
-    (map as any).tapTolerance = 16;
-  }, [map, isMobile]);
-  return null;
-}
-
 function MapReadyHandler({ onReady }: { onReady: (map: L.Map) => void }) {
   const map = useMap();
   useEffect(() => {
     onReady(map);
   }, [map, onReady]);
+  return null;
+}
+
+// Mobile touch handler: prevent browser pinch zoom conflicts while allowing Leaflet gestures
+function MobileTouchHandler({ isMobile }: { isMobile: boolean }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!isMobile) return;
+    const container = map.getContainer();
+    if (!container) return;
+
+    // Prevent browser default pinch zoom but allow Leaflet to handle it
+    const preventDefault = (e: TouchEvent) => {
+      if (e.touches.length > 1) {
+        e.preventDefault();
+      }
+    };
+    container.addEventListener("touchstart", preventDefault, { passive: false });
+    container.addEventListener("touchmove", preventDefault, { passive: false });
+
+    return () => {
+      container.removeEventListener("touchstart", preventDefault);
+      container.removeEventListener("touchmove", preventDefault);
+    };
+  }, [map, isMobile]);
   return null;
 }
 
@@ -469,6 +484,18 @@ const MapComponent = forwardRef<MapRef, MapProps>((props, ref) => {
   // Deteksi mobile untuk konfigurasi peta yang optimal
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
+  // Mobile-optimized map options
+  const mapOptions = useMemo(() => ({
+    tap: !isMobile, // Disable tap on mobile to prevent conflicts
+    tapTolerance: isMobile ? 16 : 0,
+    touchZoom: true, // Allow pinch zoom on mobile
+    boxZoom: false, // Disable box zoom on mobile
+    doubleClickZoom: !isMobile, // Disable double click zoom on mobile
+    scrollWheelZoom: !isMobile, // Disable scroll wheel zoom on mobile (use pinch instead)
+    keyboard: !isMobile, // Disable keyboard navigation on mobile
+    dragging: true, // Always allow dragging
+  }), [isMobile]);
+
   return (
     <>
       <style>{RODAKU_MAP_CSS}</style>
@@ -476,15 +503,11 @@ const MapComponent = forwardRef<MapRef, MapProps>((props, ref) => {
         center={center}
         zoom={DEFAULT_ZOOM}
         className="rodaku-map h-full w-full"
-        scrollWheelZoom
         zoomControl={false}
+        {...mapOptions}
       >
         <MapReadyHandler onReady={(map) => {
           mapInstance.current = map;
-          if (isMobile) {
-            (map as any).tap?.disable?.();
-            (map as any).tapTolerance = 16;
-          }
         }} />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -527,6 +550,7 @@ const MapComponent = forwardRef<MapRef, MapProps>((props, ref) => {
         <ClickCapture onPickPoint={onPickPoint} />
         <CenterPin active={pickMode} onPickCenter={onPickCenter} />
         <MapResizer />
+        <MobileTouchHandler isMobile={isMobile} />
         {isMobile && <ZoomControl position="bottomright" />}
       </MapContainer>
     </>
