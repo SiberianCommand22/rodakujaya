@@ -24,8 +24,9 @@ type AddressAutocompleteProps = {
   disabled?: boolean;
 };
 
-const DEBOUNCE_MS = 100;
+const DEBOUNCE_MS = 450;
 const MIN_QUERY_LENGTH = 2;
+const MAX_SUGGESTIONS = 5;
 
 export default function AddressAutocomplete({
   label,
@@ -100,7 +101,8 @@ export default function AddressAutocomplete({
         if (!res.ok) throw new Error(`Geocode HTTP ${res.status}`);
         const data = (await res.json()) as { suggestions?: SearchSuggestion[] };
         const list = Array.isArray(data.suggestions) ? data.suggestions : [];
-        setResults(list);
+        // Batasi maksimal 4-5 hasil untuk render ringan
+        setResults(list.slice(0, MAX_SUGGESTIONS));
         setHighlight(0);
         setOpen(true);
       } catch (err) {
@@ -213,7 +215,7 @@ export default function AddressAutocomplete({
             onClick={handleClear}
             aria-label={`Hapus ${label.toLowerCase()}`}
             title="Hapus teks"
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-500 transition hover:bg-slate-200 hover:text-slate-700"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-500 transition hover:bg-slate-200 hover:text-slate-700"
           >
             ✕
           </button>
@@ -235,7 +237,7 @@ export default function AddressAutocomplete({
                 aria-selected={index === highlight}
                 onMouseEnter={() => setHighlight(index)}
                 onClick={() => choose(result)}
-                className={`flex w-full items-start gap-2.5 rounded-xl px-3 py-2 text-left transition ${
+                className={`flex w-full items-start gap-2.5 rounded-xl px-3 py-3 text-left transition min-h-[48px] ${
                   index === highlight
                     ? "bg-[#EFF6FF] text-[#1D4ED8]"
                     : "text-slate-600 hover:bg-slate-50"

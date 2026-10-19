@@ -64,6 +64,8 @@ export default function HomeClient({
   const [pickLabel, setPickLabel] = useState<string | null>(null);
   const pickBusyRef = useRef(false);
   const [sheetExpanded, setSheetExpanded] = useState(true);
+  const [sheetHeight, setSheetHeight] = useState<number | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
 
   const [quote, setQuote] = useState<RouteQuote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
@@ -78,6 +80,13 @@ export default function HomeClient({
   >([]);
 
   const quoteSeq = useRef(0);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   useEffect(() => {
     if (!pickup || !dropoff) return;
@@ -520,9 +529,9 @@ export default function HomeClient({
   // ── Mode aplikasi pemesanan (peta + bottom sheet) ────────────────────────
   if (showApp && user) {
     return (
-      <div className="relative h-dvh w-full overflow-hidden bg-[#EFF6FF]">
+      <div className="relative h-[100dvh] w-full overflow-hidden bg-[#EFF6FF]">
         {/* Peta utama memenuhi 100% viewport sebagai kanvas latar */}
-        <div className="absolute inset-0 h-dvh w-full">
+        <div className="absolute inset-0 h-[100dvh] w-full">
           <Map
             pickup={pickup}
             dropoff={dropoff}
@@ -546,7 +555,7 @@ export default function HomeClient({
               setPickLabel(null);
             }}
             aria-pressed={mapPickMode}
-            className={`rounded-full px-4 py-2 text-[11px] font-black shadow-xl backdrop-blur transition ${
+            className={`rounded-full px-4 py-3 text-[11px] font-black shadow-xl backdrop-blur transition min-h-[48px] ${
               mapPickMode
                 ? "bg-[#0F172A] text-white"
                 : "bg-white/95 text-[#1D4ED8] hover:bg-white"
@@ -571,7 +580,7 @@ export default function HomeClient({
             <button
               type="button"
               onClick={() => setView("landing")}
-              className="flex items-center gap-1.5 rounded-2xl bg-white/95 px-3 py-2 text-xs font-black text-[#0F172A] shadow-xl backdrop-blur transition hover:bg-white"
+              className="flex items-center gap-1.5 rounded-2xl bg-white/95 px-3 py-3 text-xs font-black text-[#0F172A] shadow-xl backdrop-blur transition hover:bg-white min-h-[48px]"
             >
               ← Beranda
             </button>
@@ -580,7 +589,7 @@ export default function HomeClient({
                 type="button"
                 onClick={() => setHistoryOpen(true)}
                 aria-label="Riwayat pesanan"
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/95 text-sm shadow-xl backdrop-blur"
+                className="flex h-12 w-12 items-center justify-center rounded-full bg-white/95 text-sm shadow-xl backdrop-blur"
               >
                 🧾
               </button>
@@ -589,11 +598,11 @@ export default function HomeClient({
                 onClick={() => router.push("/profile")}
                 aria-label="Profil dan rekening bank"
                 title={`${user.name} — Profil & Rekening`}
-                className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-[#1D4ED8] text-sm font-black text-white shadow-xl"
+                className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-[#1D4ED8] text-sm font-black text-white shadow-xl"
               >
                 {user.avatar ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={user.avatar} alt={user.name} width={36} height={36} className="h-9 w-9 object-cover" />
+                  <img src={user.avatar} alt={user.name} width={36} height={36} className="h-12 w-12 object-cover" />
                 ) : (
                   user.name.charAt(0).toUpperCase()
                 )}
@@ -601,7 +610,7 @@ export default function HomeClient({
               <button
                 type="button"
                 onClick={handleLogout}
-                className="rounded-full bg-red-500/95 px-3 py-2 text-xs font-black text-white shadow-xl backdrop-blur transition hover:bg-red-600"
+                className="rounded-full bg-red-500/95 px-3 py-3 text-xs font-black text-white shadow-xl backdrop-blur transition hover:bg-red-600 min-h-[48px]"
               >
                 Keluar
               </button>
@@ -619,7 +628,7 @@ export default function HomeClient({
                 key={tab.key}
                 type="button"
                 onClick={() => setPendingTarget(tab.key)}
-                className={`rounded-full px-4 py-1.5 text-[11px] font-bold shadow-lg backdrop-blur transition ${
+                className={`rounded-full px-4 py-2.5 text-[11px] font-bold shadow-lg backdrop-blur transition min-h-[48px] ${
                   pendingTarget === tab.key ? "bg-[#1D4ED8] text-white" : "bg-white/95 text-[#0F172A]"
                 }`}
               >
@@ -637,8 +646,24 @@ export default function HomeClient({
         </header>
 
         {/* Panel interaksi: floating sidebar di desktop, bottom sheet di mobile */}
-        <div className="absolute inset-x-0 bottom-0 z-[1000] overflow-visible md:inset-x-auto md:bottom-6 md:left-6 md:top-6 md:flex md:w-full md:max-w-[420px]">
-          <div className="mx-auto flex max-h-[62dvh] w-full max-w-2xl flex-col overflow-visible rounded-t-[28px] border border-blue-50/50 bg-white/95 shadow-[0_-12px_40px_rgba(15,23,42,0.25)] backdrop-blur-md transition-all duration-300 md:mx-0 md:max-h-[92vh] md:w-full md:max-w-[420px] md:rounded-3xl md:shadow-2xl">
+        <div
+          className={`absolute inset-x-0 bottom-0 z-[1000] transition-transform duration-300 ease-out ${
+            isMobile
+              ? "md:inset-x-auto md:bottom-6 md:left-6 md:top-6 md:flex md:w-full md:max-w-[420px]"
+              : "md:inset-x-auto md:bottom-6 md:left-6 md:top-6 md:flex md:w-full md:max-w-[420px]"
+          }`}
+          style={isMobile ? { transform: sheetExpanded ? "translateY(0)" : "translateY(calc(100% - 72px))" } : undefined}
+        >
+          <div
+            className={`mx-auto flex w-full max-w-2xl flex-col overflow-hidden rounded-t-[28px] border border-blue-50/50 bg-white/95 shadow-[0_-12px_40px_rgba(15,23,42,0.25)] backdrop-blur-md transition-all duration-300 ${
+              isMobile
+                ? "max-h-[85dvh] rounded-t-3xl"
+                : "max-h-[92vh] md:w-full md:max-w-[420px] md:rounded-3xl md:shadow-2xl"
+            }`}
+            ref={(el) => {
+              if (el && isMobile) setSheetHeight(el.offsetHeight);
+            }}
+          >
             <div className="border-b border-slate-100 px-4 pb-2 pt-2 md:px-5 md:pt-4">
               <div className="flex items-center gap-2">
                 <span className="hidden md:flex">
@@ -664,8 +689,8 @@ export default function HomeClient({
               </div>
             </div>
             <div
-              className={`min-h-0 overflow-visible px-4 pb-5 pt-3 md:px-5 ${
-                sheetExpanded ? "max-h-[54dvh] flex-1 overflow-y-auto md:max-h-none" : "hidden md:block md:flex-1"
+              className={`min-h-0 overflow-y-auto px-4 pb-5 pt-3 md:px-5 ${
+                sheetExpanded ? "flex-1" : "hidden md:block md:flex-1"
               }`}
             >
               {shareNote && (

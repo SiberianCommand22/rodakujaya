@@ -9,6 +9,7 @@ import {
   Polyline,
   TileLayer,
   Tooltip,
+  ZoomControl,
   useMap,
   useMapEvents,
 } from "react-leaflet";
@@ -372,6 +373,18 @@ function CenterPin({
   );
 }
 
+function MobileMapConfig({ isMobile }: { isMobile: boolean }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!isMobile) return;
+    // Nonaktifkan tap handler Leaflet di mobile untuk mencegah bug double-click
+    // dan interferensi dengan scroll/gesture native browser.
+    (map as any).tap?.disable?.();
+    (map as any).tapTolerance = 16;
+  }, [map, isMobile]);
+  return null;
+}
+
 export default function Map({
   pickup,
   dropoff,
@@ -412,6 +425,9 @@ export default function Map({
     ? [pickup.lat, pickup.lng]
     : [DEFAULT_CENTER.lat, DEFAULT_CENTER.lng];
 
+  // Deteksi mobile untuk konfigurasi peta yang optimal
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+
   return (
     <>
       <style>{RODAKU_MAP_CSS}</style>
@@ -420,7 +436,9 @@ export default function Map({
         zoom={DEFAULT_ZOOM}
         className="rodaku-map h-full w-full"
         scrollWheelZoom
+        zoomControl={false}
       >
+        <MobileMapConfig isMobile={isMobile} />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -462,6 +480,7 @@ export default function Map({
         <ClickCapture onPickPoint={onPickPoint} />
         <CenterPin active={pickMode} onPickCenter={onPickCenter} />
         <MapResizer />
+        {isMobile && <ZoomControl position="bottomright" />}
       </MapContainer>
     </>
   );

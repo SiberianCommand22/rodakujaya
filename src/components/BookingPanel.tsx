@@ -263,7 +263,7 @@ export default function BookingPanel({
           <button
             type="button"
             onClick={() => setCancelOpen(true)}
-            className="w-full rounded-2xl border-2 border-red-200 bg-white py-3 text-sm font-bold text-red-600 transition hover:bg-red-50"
+            className="w-full rounded-2xl border-2 border-red-200 bg-white py-3 text-sm font-bold text-red-600 transition hover:bg-red-50 min-h-[48px]"
           >
             Batalkan Pesanan
           </button>
@@ -317,7 +317,7 @@ export default function BookingPanel({
           <button
             type="button"
             onClick={onOpenChat}
-            className="relative rounded-2xl bg-[#1D4ED8] py-3 text-sm font-bold text-white shadow-lg transition hover:bg-[#1E40AF]"
+            className="relative rounded-2xl bg-[#1D4ED8] py-3 text-sm font-bold text-white shadow-lg transition hover:bg-[#1E40AF] min-h-[48px]"
           >
             💬 Chat Driver
             {unreadCount > 0 && (
@@ -329,7 +329,7 @@ export default function BookingPanel({
           <button
             type="button"
             onClick={() => setHelpOpen(true)}
-            className="rounded-2xl border-2 border-[#1D4ED8]/20 bg-white py-3 text-center text-sm font-bold text-[#1D4ED8] transition hover:bg-[#EFF6FF]"
+            className="rounded-2xl border-2 border-[#1D4ED8]/20 bg-white py-3 text-center text-sm font-bold text-[#1D4ED8] transition hover:bg-[#EFF6FF] min-h-[48px]"
           >
             🚨 Bantuan
           </button>
@@ -360,7 +360,7 @@ export default function BookingPanel({
                     onShareTrip?.();
                     setShared(true);
                   }}
-                  className="w-full rounded-2xl bg-[#1D4ED8] py-3 text-sm font-bold text-white transition hover:bg-[#1E40AF]"
+                  className="w-full rounded-2xl bg-[#1D4ED8] py-3 text-sm font-bold text-white transition hover:bg-[#1E40AF] min-h-[48px]"
                 >
                   📍 {shared ? "Lokasi Perjalanan Dibagikan ✓" : "Bagikan Lokasi Perjalanan"}
                 </button>
@@ -370,7 +370,7 @@ export default function BookingPanel({
                     onReportIssue?.();
                     setHelpOpen(false);
                   }}
-                  className="w-full rounded-2xl border-2 border-amber-200 bg-amber-50 py-3 text-sm font-bold text-amber-800 transition hover:bg-amber-100"
+                  className="w-full rounded-2xl border-2 border-amber-200 bg-amber-50 py-3 text-sm font-bold text-amber-800 transition hover:bg-amber-100 min-h-[48px]"
                 >
                   📝 Lapor Kendala ke Admin
                 </button>
@@ -380,14 +380,14 @@ export default function BookingPanel({
                     setHelpOpen(false);
                     onOpenChat?.();
                   }}
-                  className="w-full rounded-2xl border-2 border-emerald-200 bg-emerald-50 py-3 text-sm font-bold text-emerald-700 transition hover:bg-emerald-100"
+                  className="w-full rounded-2xl border-2 border-emerald-200 bg-emerald-50 py-3 text-sm font-bold text-emerald-700 transition hover:bg-emerald-100 min-h-[48px]"
                 >
                   💬 Hubungi via Chat
                 </button>
                 <button
                   type="button"
                   onClick={() => setHelpOpen(false)}
-                  className="w-full rounded-2xl py-2 text-xs font-semibold text-slate-500 hover:bg-slate-50"
+                  className="w-full rounded-2xl py-3 text-xs font-semibold text-slate-500 hover:bg-slate-50 min-h-[48px]"
                 >
                   Tutup
                 </button>
@@ -400,7 +400,7 @@ export default function BookingPanel({
           <button
             type="button"
             onClick={() => setCancelOpen(true)}
-            className="w-full rounded-2xl py-2 text-xs font-semibold text-red-500 hover:bg-red-50"
+            className="w-full rounded-2xl py-3 text-xs font-semibold text-red-500 hover:bg-red-50 min-h-[48px]"
           >
             Batalkan pesanan
           </button>
@@ -477,7 +477,7 @@ export default function BookingPanel({
           type="button"
           onClick={detectLocation}
           disabled={geoState === "locating" || Boolean(orderStatus)}
-          className="self-end rounded-full bg-[#EFF6FF] px-3 py-1.5 text-[11px] font-bold text-[#1D4ED8] transition hover:bg-blue-100 disabled:opacity-60"
+          className="self-end rounded-full bg-[#EFF6FF] px-3 py-2 text-[11px] font-bold text-[#1D4ED8] transition hover:bg-blue-100 disabled:opacity-60 min-h-[48px]"
         >
           📍 {geoState === "locating" ? "Mendeteksi..." : "Lokasi Saya"}
         </button>
@@ -496,7 +496,7 @@ export default function BookingPanel({
                 onClick={() => pickPopular(place)}
                 disabled={Boolean(orderStatus)}
                 title={place.address}
-                className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-[#1D4ED8] shadow-sm ring-1 ring-blue-100 transition hover:bg-[#EFF6FF] disabled:opacity-60"
+                className="rounded-full bg-white px-3 py-2 text-[11px] font-bold text-[#1D4ED8] shadow-sm ring-1 ring-blue-100 transition hover:bg-[#EFF6FF] disabled:opacity-60 min-h-[48px]"
               >
                 📍 {place.label}
               </button>
@@ -534,7 +534,7 @@ export default function BookingPanel({
               type="button"
               onClick={applyPromoInput}
               disabled={Boolean(orderStatus)}
-              className="shrink-0 rounded-xl bg-[#1D4ED8] px-4 py-2 text-xs font-black text-white transition hover:bg-[#1E40AF] disabled:opacity-60"
+              className="shrink-0 rounded-xl bg-[#1D4ED8] px-4 py-3 text-xs font-black text-white transition hover:bg-[#1E40AF] disabled:opacity-60 min-h-[48px]"
             >
               Pakai
             </button>
@@ -556,7 +556,7 @@ export default function BookingPanel({
                   setPromoNote(null);
                 }}
                 disabled={Boolean(orderStatus)}
-                className={`rounded-full px-2.5 py-1 text-[10px] font-black transition disabled:opacity-60 ${
+                className={`rounded-full px-3 py-2 text-[10px] font-black transition disabled:opacity-60 min-h-[48px] ${
                   appliedCode === code
                     ? "bg-emerald-600 text-white"
                     : "bg-white text-[#1D4ED8] ring-1 ring-blue-200 hover:bg-[#EFF6FF]"
@@ -573,7 +573,7 @@ export default function BookingPanel({
                   setPromoInput("");
                   setPromoNote(null);
                 }}
-                className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-500 hover:bg-slate-200"
+                className="rounded-full bg-slate-100 px-3 py-2 text-[10px] font-bold text-slate-500 hover:bg-slate-200 min-h-[48px]"
               >
                 ✕ Hapus
               </button>
@@ -605,7 +605,7 @@ export default function BookingPanel({
                 onClick={() => onVehicleChange(key)}
                 disabled={Boolean(orderStatus)}
                 aria-pressed={active}
-                className={`flex items-center gap-2.5 rounded-2xl border-2 p-2.5 text-left transition disabled:opacity-60 ${
+                className={`flex items-center gap-2.5 rounded-2xl border-2 p-3 text-left transition disabled:opacity-60 min-h-[48px] ${
                   active
                     ? "border-[#1D4ED8] bg-blue-50/60 shadow-lg"
                     : "border-slate-100 bg-white hover:border-blue-200 hover:shadow-md"
@@ -668,7 +668,7 @@ export default function BookingPanel({
         type="button"
         onClick={handleSubmit}
         disabled={!canSubmit}
-        className="w-full rounded-2xl bg-[#1D4ED8] py-3 text-base font-black text-white shadow-xl transition hover:bg-[#1E40AF] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+        className="w-full rounded-2xl bg-[#1D4ED8] py-4 text-base font-black text-white shadow-xl transition hover:bg-[#1E40AF] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none min-h-[56px]"
       >
         {isSubmitting
           ? "Mengirim..."
