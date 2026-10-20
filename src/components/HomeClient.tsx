@@ -674,12 +674,8 @@ export default function HomeClient({
                 {tab.label}
               </button>
             ))}
-            <span
-              className={`rounded-full px-3 py-1.5 text-[10px] font-bold shadow-lg backdrop-blur ${
-                connection === "live" ? "bg-emerald-500 text-white" : "bg-white/90 text-slate-600"
-              }`}
-            >
-              {CONNECTION_LABEL[connection]}
+            <span className="rounded-full bg-emerald-500 px-3 py-1.5 text-[10px] font-bold text-white shadow-lg backdrop-blur">
+              {connection === "live" ? CONNECTION_LABEL.live : "Sistem Siap"}
             </span>
           </div>
         </header>

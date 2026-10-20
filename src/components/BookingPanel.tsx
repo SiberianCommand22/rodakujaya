@@ -15,12 +15,6 @@ import {
   type Place,
   type VehicleType,
 } from "@/lib/utils";
-import {
-  PROMOS,
-  applyPromo,
-  normalizePromoCode,
-  type PromoCode,
-} from "@/lib/promo";
 
 export type DriverInfo = {
   name: string;
@@ -61,7 +55,7 @@ type BookingPanelProps = {
     vehicleType: VehicleType;
     distanceKm: number;
     fare: number;
-    promoCode: PromoCode | null;
+    promoCode: string | null;
     discountAmount: number;
     driverNote: string | null;
   }) => void;
@@ -83,12 +77,12 @@ const STATUS_BADGE: Partial<Record<OrderStatus, string>> = {
 };
 
 const POPULAR_PLACES: { label: string; address: string; lat: number; lng: number }[] = [
-  { label: "Stasiun Gambir", address: "Stasiun Gambir, Gambir, Jakarta Pusat", lat: -6.1765, lng: 106.8309 },
   { label: "Stasiun Bogor", address: "Stasiun Bogor, Bogor Tengah, Kota Bogor", lat: -6.595, lng: 106.79 },
-  { label: "Monas", address: "Monumen Nasional, Gambir, Jakarta Pusat", lat: -6.1754, lng: 106.8272 },
-  { label: "Bandara Soetta", address: "Bandara Soekarno-Hatta, Tangerang, Banten", lat: -6.1256, lng: 106.6559 },
-  { label: "Mall Grand Indonesia", address: "Grand Indonesia, Menteng, Jakarta Pusat", lat: -6.195, lng: 106.8204 },
-  { label: "Universitas Indonesia", address: "Universitas Indonesia, Beji, Depok", lat: -6.3617, lng: 106.8289 },
+  { label: "Botani Square", address: "Botani Square, Bogor Utara, Kota Bogor", lat: -6.5846, lng: 106.7933 },
+  { label: "Sentul City", address: "Sentul City, Babakan Madang, Kab. Bogor", lat: -6.5861, lng: 106.871 },
+  { label: "Az Zikra", address: "Perumahan Muslim Az Zikra, Babakan Madang, Kab. Bogor", lat: -6.5588, lng: 106.8622 },
+  { label: "STIN", address: "Sekolah Tinggi Intelijen Negara, Babakan Madang, Kab. Bogor", lat: -6.6178, lng: 106.8975 },
+  { label: "Ciomas Rahayu", address: "Ciomas Rahayu, Ciomas, Kab. Bogor", lat: -6.6125, lng: 106.7621 },
 ];
 
 export default function BookingPanel({
@@ -114,9 +108,6 @@ export default function BookingPanel({
 }: BookingPanelProps) {
   const [geoState, setGeoState] = useState<"idle" | "locating" | "error">("idle");
   const [geoMessage, setGeoMessage] = useState<string | null>(null);
-  const [promoInput, setPromoInput] = useState("");
-  const [appliedCode, setAppliedCode] = useState<PromoCode | null>(null);
-  const [promoNote, setPromoNote] = useState<string | null>(null);
   const [driverNote, setDriverNote] = useState("");
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelBusy, setCancelBusy] = useState(false);
@@ -124,9 +115,7 @@ export default function BookingPanel({
   const [shared, setShared] = useState(false);
 
   const distanceKm = quote?.distanceKm ?? 0;
-  const baseFare = quote?.fare[vehicleType] ?? 0;
-  const promo = applyPromo(baseFare, appliedCode);
-  const fare = promo ? promo.total : baseFare;
+  const fare = quote?.fare[vehicleType] ?? 0;
   const eta = estimateEtaMinutes(driverPoint, pickup, vehicleType);
   const canSubmit =
     Boolean(pickup && dropoff && quote) &&
@@ -191,25 +180,6 @@ export default function BookingPanel({
     else onDropoffChange(target);
   }
 
-  function applyPromoInput() {
-    const code = normalizePromoCode(promoInput);
-    if (!code) {
-      setPromoNote("Kode promo tidak dikenal. Coba RODAHEMAT atau RODABARU.");
-      return;
-    }
-    if (!quote) {
-      setPromoNote("Isi jemput & tujuan dulu untuk melihat tarif.");
-      return;
-    }
-    const check = applyPromo(quote.fare[vehicleType], code);
-    if (!check) {
-      setPromoNote("Voucher tidak berlaku untuk tarif ini.");
-      return;
-    }
-    setAppliedCode(code);
-    setPromoNote(null);
-  }
-
   function handleSubmit() {
     if (!canSubmit || !pickup || !dropoff || !quote) return;
     const note = driverNote.trim();
@@ -219,8 +189,8 @@ export default function BookingPanel({
       vehicleType,
       distanceKm: quote.distanceKm,
       fare,
-      promoCode: appliedCode,
-      discountAmount: promo ? promo.discount : 0,
+      promoCode: null,
+      discountAmount: 0,
       driverNote: note.length > 0 ? note.slice(0, 200) : null,
     });
     setDriverNote("");
@@ -509,87 +479,6 @@ export default function BookingPanel({
         <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">
           Pilih armada
         </p>
-        {/* Kolom voucher promo */}
-        <div className="rounded-2xl border border-dashed border-[#1D4ED8]/30 bg-[#EFF6FF]/50 p-2.5">
-          <p className="text-[11px] font-black uppercase tracking-wider text-[#1D4ED8]">
-            🎟 Kode Promo / Voucher
-          </p>
-          <div className="mt-2 flex gap-2">
-            <input
-              type="text"
-              value={promoInput}
-              onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  applyPromoInput();
-                }
-              }}
-              placeholder="cth: RODAHEMAT"
-              disabled={Boolean(orderStatus)}
-              aria-label="Kode promo atau voucher"
-              className="min-w-0 flex-1 rounded-xl border border-blue-100 bg-white px-3 py-2 text-sm font-bold uppercase tracking-wide outline-none focus:border-[#1D4ED8] focus:ring-2 focus:ring-[#1D4ED8]/20 disabled:opacity-60"
-            />
-            <button
-              type="button"
-              onClick={applyPromoInput}
-              disabled={Boolean(orderStatus)}
-              className="shrink-0 rounded-xl bg-[#1D4ED8] px-4 py-3 text-xs font-black text-white transition hover:bg-[#1E40AF] disabled:opacity-60 min-h-[48px]"
-            >
-              Pakai
-            </button>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {(Object.keys(PROMOS) as PromoCode[]).map((code) => (
-              <button
-                key={code}
-                type="button"
-                onClick={() => {
-                  setPromoInput(code);
-                  const normalized = normalizePromoCode(code);
-                  if (!normalized) return;
-                  if (!quote) {
-                    setPromoNote("Isi jemput & tujuan dulu untuk melihat tarif.");
-                    return;
-                  }
-                  setAppliedCode(normalized);
-                  setPromoNote(null);
-                }}
-                disabled={Boolean(orderStatus)}
-                className={`rounded-full px-3 py-2 text-[10px] font-black transition disabled:opacity-60 min-h-[48px] ${
-                  appliedCode === code
-                    ? "bg-emerald-600 text-white"
-                    : "bg-white text-[#1D4ED8] ring-1 ring-blue-200 hover:bg-[#EFF6FF]"
-                }`}
-              >
-                {code} • {PROMOS[code].label}
-              </button>
-            ))}
-            {appliedCode && (
-              <button
-                type="button"
-                onClick={() => {
-                  setAppliedCode(null);
-                  setPromoInput("");
-                  setPromoNote(null);
-                }}
-                className="rounded-full bg-slate-100 px-3 py-2 text-[10px] font-bold text-slate-500 hover:bg-slate-200 min-h-[48px]"
-              >
-                ✕ Hapus
-              </button>
-            )}
-          </div>
-          {promoNote && (
-            <p className="mt-1.5 text-[11px] font-semibold text-amber-700" role="status">
-              {promoNote}
-            </p>
-          )}
-          {promo && (
-            <p className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-black text-emerald-700">
-              ✓ {promo.code} aktif — Hemat {formatIDR(promo.discount)}
-            </p>
-          )}
-        </div>
 
         <div className="mt-2 flex flex-col gap-1.5">
           {(Object.keys(FARE_MATRIX) as VehicleType[]).map((key) => {
@@ -597,7 +486,6 @@ export default function BookingPanel({
             const meta = FLEET_META[key];
             const active = key === vehicleType;
             const original = quote?.fare[key] ?? null;
-            const cardPromo = original !== null ? applyPromo(original, appliedCode) : null;
             return (
               <button
                 key={key}
@@ -633,23 +521,9 @@ export default function BookingPanel({
                   </span>
                 </span>
                 <span className="flex shrink-0 flex-col items-end gap-0.5">
-                  {cardPromo ? (
-                    <>
-                      <span className="text-[11px] font-semibold tabular-nums text-slate-400 line-through">
-                        {formatIDR(original ?? 0)}
-                      </span>
-                      <span className="text-sm font-black tabular-nums text-[#1D4ED8]">
-                        {formatIDR(cardPromo.total)}
-                      </span>
-                      <span className="rounded-full bg-emerald-100 px-1.5 py-px text-[9px] font-black text-emerald-700">
-                        Hemat {formatIDR(cardPromo.discount)}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-sm font-black tabular-nums text-[#0F172A]">
-                      {original !== null ? formatIDR(original) : quoteLoading ? "…" : "-"}
-                    </span>
-                  )}
+                  <span className="text-sm font-black tabular-nums text-[#0F172A]">
+                    {original !== null ? formatIDR(original) : quoteLoading ? "…" : "-"}
+                  </span>
                 </span>
               </button>
             );
@@ -670,11 +544,7 @@ export default function BookingPanel({
         disabled={!canSubmit}
         className="w-full rounded-2xl bg-[#1D4ED8] py-4 text-base font-black text-white shadow-xl transition hover:bg-[#1E40AF] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none min-h-[56px]"
       >
-        {isSubmitting
-          ? "Mengirim..."
-          : promo
-            ? `Pesan ${FARE_MATRIX[vehicleType].label} • ${formatIDR(promo.total)}`
-            : `Pesan ${FARE_MATRIX[vehicleType].label}`}
+        {isSubmitting ? "Mengirim..." : `Pesan ${FARE_MATRIX[vehicleType].label}`}
       </button>
     </div>
   );

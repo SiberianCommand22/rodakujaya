@@ -3,7 +3,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { LatLng } from "@/lib/utils";
 import {
-  BOGOR_TRAINING_LOCATIONS,
   searchBogorLocations,
   type BogorLocation,
 } from "@/lib/bogorLocations";
@@ -27,8 +26,6 @@ type AddressAutocompleteProps = {
   onClear?: () => void;
   accent?: "primary" | "success";
   disabled?: boolean;
-  /** Force show training chips (useful on mobile for quick access) */
-  showTrainingChipsDefault?: boolean;
 };
 
 const DEBOUNCE_MS = 500;
@@ -56,7 +53,6 @@ export default function AddressAutocomplete({
   onClear,
   accent = "primary",
   disabled = false,
-  showTrainingChipsDefault = false,
 }: AddressAutocompleteProps) {
   const [query, setQuery] = useState(address ?? "");
   const [results, setResults] = useState<SearchSuggestion[]>([]);
@@ -64,32 +60,15 @@ export default function AddressAutocomplete({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [highlight, setHighlight] = useState(0);
-  const [isMobile, setIsMobile] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const lockedRef = useRef(false);
 
   const listId = useId();
 
-  // On mobile, show training chips by default when input is empty (not focused)
-  const [showTrainingChips, setShowTrainingChips] = useState(() =>
-    showTrainingChipsDefault || (typeof window !== "undefined" && window.innerWidth < 768 && !address?.trim())
-  );
-
-  useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
-    return () => window.removeEventListener("resize", checkMobile);
-  }, []);
-
   function handleChange(next: string) {
     lockedRef.current = false;
     setQuery(next);
     setError(null);
-    // Hide chips when typing (both mobile and desktop unless forced)
-    if (!showTrainingChipsDefault) {
-      setShowTrainingChips(next.trim().length === 0);
-    }
     if (next.trim().length < MIN_QUERY_LENGTH) {
       setResults([]);
       setOpen(false);
@@ -102,7 +81,6 @@ export default function AddressAutocomplete({
     setResults([]);
     setOpen(false);
     setError(null);
-    setShowTrainingChips(true);
     onClear?.();
   }
 
@@ -111,18 +89,7 @@ export default function AddressAutocomplete({
     onSelect({ lat: result.lat, lng: result.lng }, result.displayName);
     setOpen(false);
     setResults([]);
-    setShowTrainingChips(false);
     setQuery(result.displayName);
-  }
-
-  function selectTrainingLocation(loc: BogorLocation) {
-    lockedRef.current = true;
-    const { lat, lng, address: addr } = loc;
-    onSelect({ lat, lng }, addr);
-    setOpen(false);
-    setResults([]);
-    setShowTrainingChips(false);
-    setQuery(addr);
   }
 
   function autoLock() {
@@ -133,7 +100,6 @@ export default function AddressAutocomplete({
   useEffect(() => {
     const trimmed = query.trim();
     if (trimmed.length < MIN_QUERY_LENGTH || lockedRef.current) return;
-    setShowTrainingChips(false);
 
     const controller = new AbortController();
     const timer = setTimeout(async () => {
@@ -256,8 +222,6 @@ export default function AddressAutocomplete({
               autoLock();
             }}
             onFocus={() => {
-              // On mobile, chips already show by default when empty; only force show on desktop
-              if (!isMobile) setShowTrainingChips(true);
               if (results.length > 0) setOpen(true);
             }}
             autoComplete="off"
@@ -283,21 +247,6 @@ export default function AddressAutocomplete({
           </button>
         )}
       </div>
-
-      {showTrainingChips && !disabled && (
-        <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Titik latihan cepat">
-          {BOGOR_TRAINING_LOCATIONS.slice(0, 6).map((loc) => (
-            <button
-              key={loc.id}
-              type="button"
-              onClick={() => selectTrainingLocation(loc)}
-              className="rounded-full bg-white/90 px-3 py-1.5 text-[11px] font-medium text-[#1D4ED8] shadow-sm ring-1 ring-blue-100 transition hover:bg-[#EFF6FF] hover:shadow-md disabled:opacity-60 min-h-[40px]"
-            >
-              🏷️ {loc.label}
-            </button>
-          ))}
-        </div>
-      )}
 
       {open && (results.length > 0 || error) && (
         <ul
