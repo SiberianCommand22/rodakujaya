@@ -17,10 +17,43 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
+const envTimeout = Number(process.env.DB_TIMEOUT_MS);
+export const DB_TIMEOUT_MS =
+  Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : 8000;
+
+export class DatabaseTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`Operasi database melebihi batas waktu ${timeoutMs}ms`);
+    this.name = "DatabaseTimeoutError";
+  }
+}
+
+export async function withDbTimeout<T>(
+  operation: () => Promise<T>,
+  timeoutMs: number = DB_TIMEOUT_MS,
+): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      operation(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new DatabaseTimeoutError(timeoutMs)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function createClient() {
   // Pooler connection (port 6543, pgbouncer=true) for serverless-friendly runtime
   // queries. Migrations/db push use DIRECT_URL via prisma.config.ts instead.
-  const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+  const adapter = new PrismaPg({
+    connectionString: process.env.DATABASE_URL,
+    // Batas waktu koneksi TCP: gagal cepat bila host DB tak terjangkau,
+    // bukan menggantung sampai timeout OS (~2 menit).
+    connectionTimeoutMillis: 5000,
+  });
   return new PrismaClient({ adapter });
 }
 

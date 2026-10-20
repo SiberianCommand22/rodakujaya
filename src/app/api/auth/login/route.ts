@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { DatabaseTimeoutError, db, withDbTimeout } from "@/lib/db";
 import {
   createSession,
   publicUser,
@@ -38,10 +38,34 @@ export async function POST(request: Request) {
     );
   }
 
-  const user = await db.user.findUnique({
-    where: { email },
-    include: { driver: true },
-  });
+  let user;
+  try {
+    user = await withDbTimeout(() =>
+      db.user.findUnique({
+        where: { email },
+        include: { driver: true },
+      }),
+    );
+  } catch (dbError) {
+    if (dbError instanceof DatabaseTimeoutError) {
+      console.error("[auth/login] timeout koneksi database", dbError);
+      return NextResponse.json(
+        {
+          error: "DATABASE_TIMEOUT",
+          message: "Server sedang lambat merespons. Coba lagi beberapa saat lagi.",
+        },
+        { status: 503 },
+      );
+    }
+    console.error("[auth/login] gagal mengambil data pengguna", dbError);
+    return NextResponse.json(
+      {
+        error: "DATABASE_UNAVAILABLE",
+        message: "Layanan sementara tidak tersedia. Coba lagi sebentar lagi.",
+      },
+      { status: 503 },
+    );
+  }
 
   // Constant-ish work on both branches to avoid user enumeration by timing.
   const stored = user?.password ?? "0000:0000";
@@ -65,8 +89,22 @@ export async function POST(request: Request) {
     );
   }
 
-  const token = await createSession(user.id);
-  await setSessionCookie(token, user.role);
+  try {
+    const token = await withDbTimeout(() => createSession(user.id));
+    await withDbTimeout(() => setSessionCookie(token, user.role));
+  } catch (dbError) {
+    console.error("[auth/login] gagal membuat sesi", dbError);
+    return NextResponse.json(
+      {
+        error: dbError instanceof DatabaseTimeoutError ? "DATABASE_TIMEOUT" : "DATABASE_UNAVAILABLE",
+        message:
+          dbError instanceof DatabaseTimeoutError
+            ? "Server sedang lambat merespons. Coba lagi beberapa saat lagi."
+            : "Layanan sementara tidak tersedia. Coba lagi sebentar lagi.",
+      },
+      { status: 503 },
+    );
+  }
 
   return NextResponse.json({
     user: publicUser({

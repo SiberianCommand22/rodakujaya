@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
-import { db } from "@/lib/db";
+import { DatabaseTimeoutError, db, withDbTimeout } from "@/lib/db";
 import { createSession, hashPassword, publicUser, setSessionCookie } from "@/lib/auth";
 import { authLimiter, rateLimitResponse } from "@/lib/rateLimit";
 import { INDONESIAN_BANKS } from "@/lib/walletContract";
@@ -88,7 +88,22 @@ export async function POST(request: Request) {
       );
     }
 
-    const existing = await db.user.findUnique({ where: { email: email! } });
+    let existing;
+    try {
+      existing = await withDbTimeout(() => db.user.findUnique({ where: { email: email! } }));
+    } catch (dbError) {
+      const timedOut = dbError instanceof DatabaseTimeoutError;
+      console.error("[auth/register] gagal memeriksa email", dbError);
+      return NextResponse.json(
+        {
+          error: timedOut ? "DATABASE_TIMEOUT" : "DATABASE_UNAVAILABLE",
+          message: timedOut
+            ? "Server sedang lambat merespons. Coba lagi beberapa saat lagi."
+            : "Layanan sementara tidak tersedia. Coba lagi sebentar lagi.",
+        },
+        { status: 503 },
+      );
+    }
     if (existing) {
       return NextResponse.json(
         { error: "EMAIL_TAKEN", message: "Email sudah terdaftar. Silakan masuk.", details: { email: "email sudah terdaftar" } },
@@ -97,33 +112,37 @@ export async function POST(request: Request) {
     }
 
     try {
-      const created = await db.user.create({
-        data: {
-          name: name!,
-          email: email!,
-          phone,
-          password: hashPassword(password),
-          role,
-          bankName: bankName,
-          accountNumber: accountNumber?.replace(/[\s-]/g, "") ?? null,
-          accountHolderName: accountHolderName,
-        },
-      });
+      const created = await withDbTimeout(() =>
+        db.user.create({
+          data: {
+            name: name!,
+            email: email!,
+            phone,
+            password: hashPassword(password),
+            role,
+            bankName: bankName,
+            accountNumber: accountNumber?.replace(/[\s-]/g, "") ?? null,
+            accountHolderName: accountHolderName,
+          },
+        }),
+      );
 
       let driverRow: { id: string; plateNumber: string; vehicleType: string; vehicleBrand: string | null; isOnline: boolean; isBlocked: boolean } | null = null;
       if (role === "DRIVER") {
-        driverRow = await db.driver.create({
-          data: {
-            userId: created.id,
-            plateNumber: vehiclePlate!,
-            vehicleType: vehicleType as "RODA_MOTOR" | "RODA_MOBIL",
-            vehicleBrand: vehicleBrand!,
-          },
-        });
+        driverRow = await withDbTimeout(() =>
+          db.driver.create({
+            data: {
+              userId: created.id,
+              plateNumber: vehiclePlate!,
+              vehicleType: vehicleType as "RODA_MOTOR" | "RODA_MOBIL",
+              vehicleBrand: vehicleBrand!,
+            },
+          }),
+        );
       }
 
-      const token = await createSession(created.id);
-      await setSessionCookie(token, created.role);
+      const token = await withDbTimeout(() => createSession(created.id));
+      await withDbTimeout(() => setSessionCookie(token, created.role));
 
       return NextResponse.json(
         {
@@ -154,6 +173,16 @@ export async function POST(request: Request) {
         { status: 201 },
       );
     } catch (dbError) {
+      if (dbError instanceof DatabaseTimeoutError) {
+        console.error("[auth/register] timeout koneksi database", dbError);
+        return NextResponse.json(
+          {
+            error: "DATABASE_TIMEOUT",
+            message: "Server sedang lambat merespons. Coba lagi beberapa saat lagi.",
+          },
+          { status: 503 },
+        );
+      }
       if (dbError instanceof Prisma.PrismaClientKnownRequestError && dbError.code === "P2002") {
         return NextResponse.json(
           { error: "EMAIL_TAKEN", message: "Email sudah terdaftar. Silakan masuk.", details: { email: "email sudah terdaftar" } },

@@ -81,7 +81,8 @@ export default function AuthPanel({ onAuthenticated, initialRole }: AuthPanelPro
     setError(null);
     setFieldErrors({});
 
-    const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register";    const payload =
+    const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register";
+    const payload =
       mode === "login"
         ? { email: form.email, password: form.password }
         : { ...form, role: roleTab };
@@ -92,22 +93,51 @@ export default function AuthPanel({ onAuthenticated, initialRole }: AuthPanelPro
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
 
-      if (!res.ok) {
+      // Body bisa bukan JSON (mis. halaman error proxy saat database timeout),
+      // jangan biarkan res.json() melempar dan menimpa pesan error backend.
+      const data = await res.json().catch((parseError) => {
+        console.error("[AuthPanel] respons bukan JSON valid:", {
+          endpoint,
+          status: res.status,
+          parseError,
+        });
+        return null;
+      });
+
+      if (res.status !== 200 && res.status !== 201) {
+        const message =
+          data?.message ??
+          data?.error ??
+          `Permintaan ditolak server (HTTP ${res.status}). Coba lagi sebentar lagi.`;
+        console.error("[AuthPanel] request gagal:", {
+          endpoint,
+          status: res.status,
+          message,
+          data,
+        });
         setFieldErrors(data?.details ?? {});
-        setError(data?.message ?? data?.error ?? "Gagal memproses");
+        setError(message);
         return;
       }
 
-      const user = data.user as AuthUser;
+      const user = data?.user as AuthUser | undefined;
+      if (!user) {
+        console.error("[AuthPanel] respons sukses tanpa objek user:", {
+          endpoint,
+          status: res.status,
+          data,
+        });
+        setError("Respons server tidak lengkap. Coba lagi.");
+        return;
+      }
 
       // Stealth: akun admin tidak dipakai di panel publik, tanpa membocorkan /admin.
       if (user.role === "ADMIN") {
         try {
           await fetch("/api/auth/logout", { method: "POST" });
-        } catch {
-          /* abaikan */
+        } catch (logoutError) {
+          console.error("[AuthPanel] gagal logout admin:", logoutError);
         }
         setError("Akun ini tidak dapat digunakan di sini.");
         return;
@@ -119,7 +149,11 @@ export default function AuthPanel({ onAuthenticated, initialRole }: AuthPanelPro
       if (user.role === "DRIVER") {
         router.push("/driver");
       }
-    } catch {
+    } catch (networkError) {
+      console.error("[AuthPanel] gagal terhubung ke server:", {
+        endpoint,
+        networkError,
+      });
       setError("Tidak dapat terhubung ke server");
     } finally {
       setBusy(false);
