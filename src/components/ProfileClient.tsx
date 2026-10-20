@@ -72,7 +72,10 @@ export default function ProfileClient({ initialUser }: ProfileClientProps) {
           </div>
           <button
             type="button"
-            onClick={() => router.push("/")}
+            onClick={() => {
+              if (window.history.length > 1) router.back();
+              else router.push("/");
+            }}
             className="ml-auto rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200"
           >
             ← Kembali

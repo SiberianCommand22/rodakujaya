@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import EReceiptModal, { type EReceiptData } from "@/components/EReceiptModal";
 import { formatIDR, type OrderStatus } from "@/lib/utils";
 
 export type HistoryOrder = {
@@ -9,11 +10,40 @@ export type HistoryOrder = {
   vehicleType: string;
   distanceKm: number;
   fare: number;
+  discount?: number | null;
+  promoCode?: string | null;
   pickupAddress: string | null;
   dropoffAddress: string | null;
   createdAt: string;
-  driver: { plateNumber: string } | null;
+  updatedAt?: string;
+  customer?: { name?: string | null } | null;
+  driver: {
+    plateNumber: string;
+    user?: { name?: string | null } | null;
+  } | null;
+  payment?: { status?: string | null } | null;
 };
+
+/** Mapping riwayat → struk; fallback aman untuk data lama (tanpa driver/payment). */
+function toReceipt(order: HistoryOrder): EReceiptData {
+  return {
+    orderId: order.id,
+    status: order.status,
+    vehicleType: order.vehicleType,
+    distanceKm: order.distanceKm,
+    fare: order.fare,
+    discount: order.discount ?? 0,
+    promoCode: order.promoCode ?? null,
+    pickupAddress: order.pickupAddress,
+    dropoffAddress: order.dropoffAddress,
+    completedAt: order.status === "COMPLETED" ? order.updatedAt ?? null : null,
+    createdAt: order.createdAt,
+    driverName: order.driver?.user?.name ?? null,
+    plateNumber: order.driver?.plateNumber ?? null,
+    customerName: order.customer?.name ?? null,
+    paymentStatus: order.payment?.status ?? null,
+  };
+}
 
 type Props = {
   open: boolean;
@@ -47,6 +77,12 @@ type DrawerState =
 
 export default function OrderHistoryDrawer({ open, onClose }: Props) {
   const [state, setState] = useState<DrawerState>({ phase: "loading" });
+  const [receipt, setReceipt] = useState<EReceiptData | null>(null);
+
+  const closeDrawer = () => {
+    setReceipt(null);
+    onClose();
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -79,87 +115,116 @@ export default function OrderHistoryDrawer({ open, onClose }: Props) {
   const error = state.phase === "error" ? state.message : null;
 
   return (
-    <div className="fixed inset-0 z-[2000] flex justify-end">
-      <button
-        type="button"
-        aria-label="Tutup riwayat"
-        onClick={onClose}
-        className="absolute inset-0 bg-[#0F172A]/50 backdrop-blur-sm"
-      />
+    <>
+      <div className="fixed inset-0 z-[2000] flex justify-end">
+        <button
+          type="button"
+          aria-label="Tutup riwayat"
+          onClick={closeDrawer}
+          className="absolute inset-0 bg-[#0F172A]/50 backdrop-blur-sm"
+        />
 
-      <aside className="relative flex h-full w-full max-w-md flex-col bg-white shadow-2xl">
-        <header className="flex items-center justify-between border-b border-blue-100 px-5 py-4">
-          <div>
-            <h2 className="text-lg font-bold text-[#0F172A]">Riwayat Pesanan</h2>
-            <p className="text-xs text-slate-500">
-              {orders.length} transaksi terakhir
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl bg-[#EFF6FF] px-3 py-1.5 text-sm font-semibold text-[#1D4ED8]"
-          >
-            Tutup
-          </button>
-        </header>
+        <aside className="relative flex h-full w-full max-w-md flex-col bg-white shadow-2xl">
+          <header className="flex items-center justify-between border-b border-blue-100 px-5 py-4">
+            <div>
+              <h2 className="text-lg font-bold text-[#0F172A]">Riwayat Pesanan</h2>
+              <p className="text-xs text-slate-500">
+                {orders.length} transaksi terakhir
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={closeDrawer}
+              className="rounded-xl bg-[#EFF6FF] px-3 py-1.5 text-sm font-semibold text-[#1D4ED8]"
+            >
+              Tutup
+            </button>
+          </header>
 
-        <div className="flex-1 overflow-y-auto p-4">
-          {loading && (
-            <p className="py-10 text-center text-sm text-slate-400">Memuat...</p>
-          )}
-          {error && (
-            <p className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700">
-              {error}
-            </p>
-          )}
-          {!loading && !error && orders.length === 0 && (
-            <p className="py-10 text-center text-sm text-slate-400">
-              Belum ada pesanan.
-            </p>
-          )}
+          <div className="flex-1 overflow-y-auto p-4">
+            {loading && (
+              <p className="py-10 text-center text-sm text-slate-400">Memuat...</p>
+            )}
+            {error && (
+              <p className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700">
+                {error}
+              </p>
+            )}
+            {!loading && !error && orders.length === 0 && (
+              <p className="py-10 text-center text-sm text-slate-400">
+                Belum ada pesanan.
+              </p>
+            )}
 
-          <ul className="flex flex-col gap-3">
-            {orders.map((order) => (
-              <li
-                key={order.id}
-                className="rounded-2xl border border-blue-100 bg-[#EFF6FF] p-4"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${TONE[order.status]}`}
+            <ul className="flex flex-col gap-3">
+              {orders.map((order) => {
+                const card = (
+                  <>
+                    <div className="flex items-start justify-between gap-3">
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${TONE[order.status]}`}
+                      >
+                        {STATUS_LABEL[order.status]}
+                      </span>
+                      <span className="text-xs font-bold text-[#1D4ED8]">
+                        {formatIDR(order.fare)}
+                      </span>
+                    </div>
+
+                    <p className="mt-3 text-xs leading-relaxed text-slate-600">
+                      <span className="font-semibold text-[#0F172A]">Jemput:</span>{" "}
+                      {order.pickupAddress ?? "-"}
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-slate-600">
+                      <span className="font-semibold text-[#0F172A]">Tujuan:</span>{" "}
+                      {order.dropoffAddress ?? "-"}
+                    </p>
+
+                    <div className="mt-3 flex items-center justify-between border-t border-white pt-2 text-[11px] text-slate-500">
+                      <span>{order.distanceKm.toFixed(2)} km</span>
+                      <span>#{order.id.slice(-6).toUpperCase()}</span>
+                      <span>
+                        {new Date(order.createdAt).toLocaleString("id-ID", {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        })}
+                      </span>
+                    </div>
+                  </>
+                );
+
+                return (
+                  <li
+                    key={order.id}
+                    className="rounded-2xl border border-blue-100 bg-[#EFF6FF] p-4"
                   >
-                    {STATUS_LABEL[order.status]}
-                  </span>
-                  <span className="text-xs font-bold text-[#1D4ED8]">
-                    {formatIDR(order.fare)}
-                  </span>
-                </div>
+                    {order.status === "COMPLETED" ? (
+                      <button
+                        type="button"
+                        onClick={() => setReceipt(toReceipt(order))}
+                        className="-m-1 block w-full rounded-xl p-1 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D4ED8]/50"
+                      >
+                        {card}
+                        <span className="mt-3 flex items-center justify-center rounded-xl bg-white/70 py-2 text-[11px] font-bold text-[#1D4ED8]">
+                          Lihat Struk E-Receipt →
+                        </span>
+                      </button>
+                    ) : (
+                      card
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </aside>
+      </div>
 
-                <p className="mt-3 text-xs leading-relaxed text-slate-600">
-                  <span className="font-semibold text-[#0F172A]">Jemput:</span>{" "}
-                  {order.pickupAddress ?? "-"}
-                </p>
-                <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                  <span className="font-semibold text-[#0F172A]">Tujuan:</span>{" "}
-                  {order.dropoffAddress ?? "-"}
-                </p>
-
-                <div className="mt-3 flex items-center justify-between border-t border-white pt-2 text-[11px] text-slate-500">
-                  <span>{order.distanceKm.toFixed(2)} km</span>
-                  <span>#{order.id.slice(-6).toUpperCase()}</span>
-                  <span>
-                    {new Date(order.createdAt).toLocaleString("id-ID", {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    })}
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </aside>
-    </div>
+      <EReceiptModal
+        open={receipt !== null}
+        receipt={receipt}
+        onClose={() => setReceipt(null)}
+      />
+    </>
   );
 }

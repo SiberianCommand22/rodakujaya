@@ -83,6 +83,8 @@ export default function HomeClient({
   >([]);
 
   const quoteSeq = useRef(0);
+  const summaryRef = useRef<TripSummary | null>(null);
+  const openingRef = useRef(false);
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -510,6 +512,82 @@ export default function HomeClient({
       setError(err instanceof Error ? err.message : "Gagal membatalkan pesanan");
     }
   }, [orderId, resetToBooking]);
+
+  useEffect(() => {
+    summaryRef.current = summary;
+  }, [summary]);
+
+  /**
+   * Fallback sinkronisasi status pesanan pelanggan: polling ringan tiap 2,5
+   * detik + re-fetch instan saat tab kembali terlihat (visibilitychange),
+   * untuk mengejar event socket yang terlewat saat aplikasi di-background.
+   * Modal struk dibuka otomatis saat COMPLETED/AWAITING_PAYMENT — hanya
+   * sekali (summaryRef null), tidak dibuka ulang setelah ditutup user.
+   */
+  useEffect(() => {
+    if (!user || user.role === "DRIVER" || !orderId) return;
+    let disposed = false;
+    let inFlight = false;
+
+    async function pollOrder() {
+      if (disposed || inFlight) return;
+      inFlight = true;
+      try {
+        const res = await fetch("/api/orders?limit=20");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (disposed) return;
+        const order = (data.recent ?? []).find((o: { id: string }) => o.id === orderId);
+        if (!order) return;
+        if (order.status === "CANCELLED") {
+          resetToBooking();
+          return;
+        }
+        setOrderStatus(order.status);
+        const d = order.driver;
+        if (d?.user?.name || d?.plateNumber) {
+          setDriver((prev) => ({
+            name: d.user?.name ?? prev?.name ?? "Mitra Driver",
+            plateNumber: d.plateNumber ?? prev?.plateNumber ?? "-",
+            rating: prev?.rating ?? 4.9,
+            vehicleLabel:
+              prev?.vehicleLabel ?? (vehicleType === "RODA_MOBIL" ? "RodaMobil" : "RodaMotor"),
+          }));
+          if (typeof d.lastLat === "number" && typeof d.lastLng === "number") {
+            setDriverPoint({ lat: d.lastLat, lng: d.lastLng });
+          }
+        }
+        if (
+          (order.status === "COMPLETED" || order.status === "AWAITING_PAYMENT") &&
+          summaryRef.current === null &&
+          !openingRef.current
+        ) {
+          openingRef.current = true;
+          try {
+            setPendingQueue(data.pendingSettlements ?? []);
+            presentCompletedOrder(order);
+          } finally {
+            openingRef.current = false;
+          }
+        }
+      } catch {
+        /* best-effort */
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    const timer = setInterval(() => void pollOrder(), 2500);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") void pollOrder();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      disposed = true;
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [user, orderId, vehicleType, presentCompletedOrder, resetToBooking]);
 
   async function handleLogout() {
     await portalLogout("CUSTOMER");

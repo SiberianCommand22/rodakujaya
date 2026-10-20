@@ -496,7 +496,7 @@ export default function TripSummaryModal({
                 </p>
                 <p className="mt-1 text-[11px] leading-relaxed text-slate-600">
                   Transfer sejumlah tagihan ke rekening di bawah, lalu tekan
-                  "Saya Sudah Transfer". Driver akan memverifikasi secara manual.
+                  &quot;Saya Sudah Transfer&quot;. Driver akan memverifikasi secara manual.
                 </p>
                 <div className="mt-2.5 rounded-xl bg-white px-3 py-2.5 text-sm shadow-sm">
                   {hasBankDetails ? (

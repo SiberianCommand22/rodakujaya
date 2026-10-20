@@ -1047,25 +1047,14 @@ export default function DriverDashboard({
                     </div>
                   </div>
 
-                  {/* Actions: Selesai / Pesan Kembali */}
-                  <div className="flex gap-3 pt-2">
+                  {/* Actions: kembali ke radar tanpa reload */}
+                  <div className="pt-2">
                     <button
                       type="button"
                       onClick={() => setReceipt(null)}
-                      className="flex-1 rounded-2xl border border-slate-200 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+                      className="w-full rounded-2xl bg-[#1D4ED8] py-3.5 text-sm font-bold text-white shadow-xl transition hover:bg-[#1E40AF]"
                     >
-                      Selesai
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setReceipt(null);
-                        // Refresh to get new orders
-                        window.location.reload();
-                      }}
-                      className="flex-1 rounded-2xl bg-[#1D4ED8] py-3 text-sm font-bold text-white shadow-xl transition hover:bg-[#1E40AF]"
-                    >
-                      Pesan Kembali
+                      Selesai &amp; Cari Pesanan Baru
                     </button>
                   </div>
                 </div>
