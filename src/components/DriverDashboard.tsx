@@ -1052,7 +1052,7 @@ export default function DriverDashboard({
                     <button
                       type="button"
                       onClick={() => setReceipt(null)}
-                      className="w-full rounded-2xl bg-[#1D4ED8] py-3.5 text-sm font-bold text-white shadow-xl transition hover:bg-[#1E40AF]"
+                      className="w-full rounded-2xl bg-[#1D4ED8] py-3.5 text-sm font-bold text-white shadow-xl transition hover:bg-[#1E40AF] active:scale-[0.98]"
                     >
                       Selesai &amp; Cari Pesanan Baru
                     </button>

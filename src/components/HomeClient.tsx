@@ -760,18 +760,14 @@ export default function HomeClient({
 
         {/* Panel interaksi: floating sidebar di desktop, bottom sheet di mobile */}
         <div
-          className={`absolute inset-x-0 bottom-0 z-[1000] transition-transform duration-300 ease-out ${
-            isMobile
-              ? "md:inset-x-auto md:bottom-6 md:left-6 md:top-6 md:flex md:w-full md:max-w-[420px]"
-              : "md:inset-x-auto md:bottom-6 md:left-6 md:top-6 md:flex md:w-full md:max-w-[420px]"
-          }`}
+          className="absolute inset-x-0 bottom-0 z-[1000] transition-transform duration-300 ease-out md:inset-x-auto md:bottom-6 md:left-6 md:flex md:w-full md:max-w-[420px]"
           style={isMobile ? { transform: sheetExpanded ? "translateY(0)" : "translateY(calc(100% - 72px))" } : undefined}
->
+        >
           <div
-            className={`mx-auto flex w-full max-w-2xl flex-col overflow-hidden rounded-t-[28px] border border-blue-50/50 bg-white/95 shadow-[0_-12px_40px_rgba(15,23,42,0.25)] backdrop-blur-md transition-all duration-300 ${
+            className={`mx-auto flex w-full max-w-2xl flex-col overflow-hidden rounded-t-[28px] border border-blue-50/50 bg-white/95 shadow-[0_-10px_36px_rgba(15,23,42,0.16)] backdrop-blur-md transition-all duration-300 ${
               isMobile
                 ? "max-h-[85dvh] rounded-t-3xl"
-                : "max-h-[92vh] md:w-full md:max-w-[420px] md:rounded-3xl md:shadow-2xl"
+                : "max-h-[92vh] md:w-full md:max-w-[420px] md:rounded-3xl md:shadow-[0_18px_50px_rgba(15,23,42,0.16)]"
             }`}
             style={isMobile ? { overscrollBehavior: "contain" } : undefined}
           >
@@ -787,7 +783,7 @@ export default function HomeClient({
                   type="button"
                   onClick={() => setSheetExpanded((v) => !v)}
                   aria-label={sheetExpanded ? "Ciutkan panel" : "Bentangkan panel"}
-                  className="mx-auto flex flex-col items-center gap-1 rounded-full px-6 py-1 md:mx-0 md:ml-auto"
+                  className="mx-auto flex min-h-[44px] flex-col items-center gap-1 rounded-full px-6 py-1 transition active:scale-95 md:mx-0 md:ml-auto"
                 >
                   <span className="h-1.5 w-12 rounded-full bg-slate-200 md:hidden" aria-hidden />
                   <span className="hidden text-[10px] font-bold uppercase tracking-widest text-slate-400 md:block">

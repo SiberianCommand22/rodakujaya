@@ -542,7 +542,7 @@ export default function BookingPanel({
         type="button"
         onClick={handleSubmit}
         disabled={!canSubmit}
-        className="w-full rounded-2xl bg-[#1D4ED8] py-4 text-base font-black text-white shadow-xl transition hover:bg-[#1E40AF] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none min-h-[56px]"
+        className="w-full rounded-2xl bg-[#1D4ED8] py-4 text-base font-black text-white shadow-xl transition hover:bg-[#1E40AF] active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none min-h-[56px]"
       >
         {isSubmitting ? "Mengirim..." : `Pesan ${FARE_MATRIX[vehicleType].label}`}
       </button>

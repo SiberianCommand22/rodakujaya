@@ -237,14 +237,14 @@ export default function EReceiptModal({ open, receipt, onClose }: Props) {
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[52px] flex-1 rounded-2xl border border-slate-200 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+            className="min-h-[52px] flex-1 rounded-2xl border border-slate-200 text-sm font-bold text-slate-600 transition hover:bg-slate-50 active:scale-[0.98]"
           >
             Tutup
           </button>
           <button
             type="button"
             onClick={() => window.print()}
-            className="min-h-[52px] flex-1 rounded-2xl bg-[#1D4ED8] text-sm font-bold text-white shadow-lg transition hover:bg-[#1E40AF]"
+            className="min-h-[52px] flex-1 rounded-2xl bg-[#1D4ED8] text-sm font-bold text-white shadow-lg transition hover:bg-[#1E40AF] active:scale-[0.98]"
           >
             Unduh / Cetak
           </button>

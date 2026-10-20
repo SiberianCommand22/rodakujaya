@@ -356,7 +356,7 @@ export default function TripSummaryModal({
                   onClose();
                   window.location.href = "/";
                 }}
-                className="flex-1 rounded-2xl bg-[#1D4ED8] py-3 text-sm font-bold text-white shadow-xl transition hover:bg-[#1E40AF]"
+                className="flex-1 rounded-2xl bg-[#1D4ED8] py-3 text-sm font-bold text-white shadow-xl transition hover:bg-[#1E40AF] active:scale-[0.98]"
               >
                 Pesan Kembali
               </button>
@@ -646,7 +646,7 @@ export default function TripSummaryModal({
                           ? undefined
                           : "Pilih 1-5 bintang terlebih dahulu"
                       }
-                      className="flex-1 rounded-2xl bg-[#1D4ED8] py-3 text-sm font-bold text-white shadow-xl transition hover:bg-[#1E40AF] disabled:opacity-60"
+                      className="flex-1 rounded-2xl bg-[#1D4ED8] py-3 text-sm font-bold text-white shadow-xl transition hover:bg-[#1E40AF] active:scale-[0.98] disabled:opacity-60"
                     >
                       {phase === "processing" ? "Memproses..." : "Kirim Ulasan & Selesai"}
                     </button>
@@ -675,7 +675,7 @@ export default function TripSummaryModal({
                       type="button"
                       onClick={() => void claimTransfer()}
                       disabled={phase !== "idle"}
-                      className="w-full rounded-2xl bg-[#1D4ED8] py-3.5 text-sm font-black text-white shadow-xl transition hover:bg-[#1E40AF] disabled:opacity-60"
+                      className="w-full rounded-2xl bg-[#1D4ED8] py-3.5 text-sm font-black text-white shadow-xl transition hover:bg-[#1E40AF] active:scale-[0.98] disabled:opacity-60"
                     >
                       {phase === "claiming" ? "Mengklaim..." : "Saya Sudah Transfer"}
                     </button>
