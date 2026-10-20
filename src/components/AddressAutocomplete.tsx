@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { LocationPinIcon, TagIcon } from "@/components/icons";
 import type { LatLng } from "@/lib/utils";
 import {
   searchBogorLocations,
@@ -279,7 +280,11 @@ export default function AddressAutocomplete({
                   }`}
                   aria-hidden
                 >
-                  {result.source === "training" ? "🏷️" : "📍"}
+                  {result.source === "training" ? (
+                    <TagIcon className="h-3.5 w-3.5" />
+                  ) : (
+                    <LocationPinIcon className="h-3.5 w-3.5" />
+                  )}
                 </span>
                 <span className="min-w-0 flex-1 leading-snug">
                   <span className="block truncate text-[13px] font-bold text-[#0F172A]">

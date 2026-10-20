@@ -36,7 +36,7 @@ export default function CancelReasonModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl"
+        className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-lg font-black text-[#0F172A]">Batalkan Pesanan?</h2>
@@ -50,7 +50,7 @@ export default function CancelReasonModal({
             return (
               <label
                 key={option}
-                className={`flex cursor-pointer items-center gap-3 rounded-2xl border-2 px-4 py-2.5 text-sm transition ${
+                className={`flex min-h-[48px] cursor-pointer items-center gap-3 rounded-2xl border-2 px-4 py-2.5 text-sm transition ${
                   checked
                     ? "border-[#1D4ED8] bg-blue-50/60 font-bold text-[#0F172A]"
                     : "border-slate-100 font-medium text-slate-600 hover:border-blue-200"
@@ -76,7 +76,7 @@ export default function CancelReasonModal({
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="flex-1 rounded-2xl border-2 border-slate-200 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50 disabled:opacity-60"
+            className="min-h-[48px] flex-1 rounded-2xl border-2 border-slate-200 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50 disabled:opacity-60"
           >
             Kembali
           </button>
@@ -84,7 +84,7 @@ export default function CancelReasonModal({
             type="button"
             onClick={() => onConfirm(reason)}
             disabled={busy}
-            className="flex-[2] rounded-2xl bg-red-500 py-3 text-sm font-black text-white shadow-xl transition hover:bg-red-600 disabled:opacity-60"
+            className="min-h-[52px] flex-[2] rounded-2xl bg-red-500 py-3 text-sm font-black text-white shadow-xl transition hover:bg-red-600 disabled:opacity-60"
           >
             {busy ? "Membatalkan..." : "Ya, Batalkan"}
           </button>

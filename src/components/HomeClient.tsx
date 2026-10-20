@@ -13,6 +13,13 @@ import DriverTracker, {
 } from "@/components/DriverTracker";
 import OrderHistoryDrawer from "@/components/OrderHistoryDrawer";
 import RodakuLogo from "@/components/RodakuLogo";
+import {
+  ArrowLeftIcon,
+  FlagIcon,
+  LocationPinIcon,
+  ReceiptIcon,
+  TagIcon,
+} from "@/components/icons";
 import { portalLogout } from "@/lib/sessionClient";
 import TripSummaryModal, {
   type TripSummary,
@@ -168,6 +175,7 @@ export default function HomeClient({
       pickupAddress: string | null;
       dropoffAddress: string | null;
       updatedAt: string;
+      completedAt?: string | null;
       customer: { name: string } | null;
       driver: {
         plateNumber: string;
@@ -198,7 +206,11 @@ export default function HomeClient({
       accountHolderName: order.driver?.user?.accountHolderName ?? null,
       paid: order.payment?.status === "PAID",
       customerName: order.customer?.name ?? user?.name ?? null,
-      completedAt: order.status === "COMPLETED" ? order.updatedAt : null,
+      completedAt:
+        order.completedAt ??
+        (order.status === "COMPLETED" || order.status === "AWAITING_PAYMENT"
+          ? order.updatedAt
+          : null),
     }),
     [user?.name],
   );
@@ -669,7 +681,10 @@ export default function HomeClient({
                 : "bg-white/95 text-[#1D4ED8] hover:bg-white"
             }`}
           >
-            📍 {mapPickMode ? "Selesai Memilih" : "Geser Peta"}
+            <span className="inline-flex items-center gap-1.5">
+              <LocationPinIcon className="h-4 w-4" />
+              {mapPickMode ? "Selesai Memilih" : "Geser Peta"}
+            </span>
           </button>
         </div>
         {mapPickMode && !orderStatus && (
@@ -690,7 +705,8 @@ export default function HomeClient({
               onClick={() => setView("landing")}
               className="flex items-center gap-1.5 rounded-2xl bg-white/95 px-3 py-3 text-xs font-black text-[#0F172A] shadow-xl backdrop-blur transition hover:bg-white min-h-[48px]"
             >
-              ← Beranda
+              <ArrowLeftIcon className="h-4 w-4" />
+              Beranda
             </button>
             {/* Quick access to training locations on mobile */}
             <button
@@ -699,16 +715,17 @@ export default function HomeClient({
               className="hidden md:flex items-center gap-1.5 rounded-2xl bg-white/95 px-3 py-3 text-xs font-black text-[#1D4ED8] shadow-xl backdrop-blur transition hover:bg-[#EFF6FF] min-h-[48px]"
               aria-label="Titik latihan Bogor"
             >
-              🏷️ Titik Latihan
+              <TagIcon className="h-4 w-4" />
+              Titik Latihan
             </button>
             <div className="ml-auto flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setHistoryOpen(true)}
                 aria-label="Riwayat pesanan"
-                className="flex h-12 w-12 items-center justify-center rounded-full bg-white/95 text-sm shadow-xl backdrop-blur"
+                className="flex h-12 w-12 items-center justify-center rounded-full bg-white/95 shadow-xl backdrop-blur"
               >
-                🧾
+                <ReceiptIcon className="h-5 w-5 text-[#0F172A]" />
               </button>
               <button
                 type="button"
@@ -737,18 +754,19 @@ export default function HomeClient({
           <div className="mx-auto mt-2 flex max-w-2xl items-center justify-center gap-2 md:mx-0 md:max-w-none md:justify-start">
             {(
               [
-                { key: "pickup", label: "📍 Jemput" },
-                { key: "dropoff", label: "🏁 Tujuan" },
+                { key: "pickup", label: "Jemput", Icon: LocationPinIcon },
+                { key: "dropoff", label: "Tujuan", Icon: FlagIcon },
               ] as const
             ).map((tab) => (
               <button
                 key={tab.key}
                 type="button"
                 onClick={() => setPendingTarget(tab.key)}
-                className={`rounded-full px-4 py-2.5 text-[11px] font-bold shadow-lg backdrop-blur transition min-h-[48px] ${
+                className={`flex items-center gap-1.5 rounded-full px-4 py-2.5 text-[11px] font-bold shadow-lg backdrop-blur transition min-h-[48px] ${
                   pendingTarget === tab.key ? "bg-[#1D4ED8] text-white" : "bg-white/95 text-[#0F172A]"
                 }`}
               >
+                <tab.Icon className="h-3.5 w-3.5" />
                 {tab.label}
               </button>
             ))}
@@ -915,7 +933,10 @@ export default function HomeClient({
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-base font-black text-[#0F172A]">🏷️ Titik Latihan Bogor</h2>
+                <h2 className="flex items-center gap-2 text-base font-black text-[#0F172A]">
+                  <TagIcon className="h-4 w-4 text-[#1D4ED8]" />
+                  Titik Latihan Bogor
+                </h2>
                 <button
                   type="button"
                   onClick={() => setShowTrainingLocations(false)}
@@ -945,7 +966,9 @@ export default function HomeClient({
                     }}
                     className="flex items-start gap-3 rounded-2xl bg-white px-3 py-3 text-left border border-slate-100 shadow-sm transition hover:bg-[#EFF6FF] hover:shadow-md min-h-[48px]"
                   >
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 shadow-sm">🏷️</span>
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 shadow-sm">
+                      <TagIcon className="h-5 w-5" />
+                    </span>
                     <div className="min-w-0 flex-1 leading-snug">
                       <span className="block truncate text-[13px] font-bold text-[#0F172A]">{loc.label}</span>
                       <span className="block truncate text-[11px] font-normal text-slate-500">{loc.address}</span>

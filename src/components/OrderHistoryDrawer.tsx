@@ -16,6 +16,7 @@ export type HistoryOrder = {
   dropoffAddress: string | null;
   createdAt: string;
   updatedAt?: string;
+  completedAt?: string | null;
   customer?: { name?: string | null } | null;
   driver: {
     plateNumber: string;
@@ -36,7 +37,11 @@ function toReceipt(order: HistoryOrder): EReceiptData {
     promoCode: order.promoCode ?? null,
     pickupAddress: order.pickupAddress,
     dropoffAddress: order.dropoffAddress,
-    completedAt: order.status === "COMPLETED" ? order.updatedAt ?? null : null,
+    completedAt:
+      order.completedAt ??
+      (order.status === "COMPLETED" || order.status === "AWAITING_PAYMENT"
+        ? order.updatedAt ?? null
+        : null),
     createdAt: order.createdAt,
     driverName: order.driver?.user?.name ?? null,
     plateNumber: order.driver?.plateNumber ?? null,
@@ -135,13 +140,13 @@ export default function OrderHistoryDrawer({ open, onClose }: Props) {
             <button
               type="button"
               onClick={closeDrawer}
-              className="rounded-xl bg-[#EFF6FF] px-3 py-1.5 text-sm font-semibold text-[#1D4ED8]"
+              className="flex min-h-[44px] items-center rounded-xl bg-[#EFF6FF] px-3 text-sm font-semibold text-[#1D4ED8]"
             >
               Tutup
             </button>
           </header>
 
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 overflow-y-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
             {loading && (
               <p className="py-10 text-center text-sm text-slate-400">Memuat...</p>
             )}

@@ -4,6 +4,16 @@ import { useState } from "react";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
 import CancelReasonModal from "@/components/CancelReasonModal";
 import {
+  AlertIcon,
+  CarIcon,
+  ChatIcon,
+  FlagIcon,
+  HelpIcon,
+  LocationPinIcon,
+  MotorbikeIcon,
+  NoteIcon,
+} from "@/components/icons";
+import {
   FARE_MATRIX,
   ORDER_STATUS_META,
   estimateEtaMinutes,
@@ -63,10 +73,10 @@ type BookingPanelProps = {
 
 const FLEET_META: Record<
   VehicleType,
-  { icon: string; desc: string; eta: string; capacity: string }
+  { Icon: typeof MotorbikeIcon; desc: string; eta: string; capacity: string }
 > = {
-  RODA_MOTOR: { icon: "🛵", desc: "Cepat & lincah", eta: "3 mnt", capacity: "1 orang" },
-  RODA_MOBIL: { icon: "🚗", desc: "Nyaman & lega", eta: "6 mnt", capacity: "4 orang" },
+  RODA_MOTOR: { Icon: MotorbikeIcon, desc: "Cepat & lincah", eta: "3 mnt", capacity: "1 orang" },
+  RODA_MOBIL: { Icon: CarIcon, desc: "Nyaman & lega", eta: "6 mnt", capacity: "4 orang" },
 };
 
 const STATUS_BADGE: Partial<Record<OrderStatus, string>> = {
@@ -214,8 +224,8 @@ export default function BookingPanel({
         <div className="relative flex h-24 w-24 items-center justify-center">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#1D4ED8]/20" />
           <span className="absolute inline-flex h-16 w-16 animate-ping rounded-full bg-[#1D4ED8]/30 [animation-delay:0.4s]" />
-          <span className="relative flex h-14 w-14 items-center justify-center rounded-full bg-[#1D4ED8] text-2xl text-white shadow-xl">
-            🛵
+          <span className="relative flex h-14 w-14 items-center justify-center rounded-full bg-[#1D4ED8] text-white shadow-xl">
+            <MotorbikeIcon className="h-7 w-7" />
           </span>
         </div>
         <div>
@@ -225,8 +235,14 @@ export default function BookingPanel({
           </p>
         </div>
         <div className="w-full rounded-2xl bg-[#EFF6FF] px-4 py-3 text-left text-xs text-slate-600">
-          <p className="truncate font-semibold text-[#0F172A]">📍 {pickup?.address ?? "-"}</p>
-          <p className="mt-1 truncate">🏁 {dropoff?.address ?? "-"}</p>
+          <p className="flex truncate items-center gap-1.5 font-semibold text-[#0F172A]">
+            <LocationPinIcon className="h-3.5 w-3.5 shrink-0 text-[#1D4ED8]" />
+            <span className="truncate">{pickup?.address ?? "-"}</span>
+          </p>
+          <p className="mt-1 flex truncate items-center gap-1.5">
+            <FlagIcon className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+            <span className="truncate">{dropoff?.address ?? "-"}</span>
+          </p>
           <p className="mt-1 font-bold text-[#1D4ED8]">{quote ? `${formatKm(distanceKm)} • ${formatIDR(fare)}` : "Menghitung tarif..."}</p>
         </div>
         {onCancelOrder && (
@@ -287,9 +303,10 @@ export default function BookingPanel({
           <button
             type="button"
             onClick={onOpenChat}
-            className="relative rounded-2xl bg-[#1D4ED8] py-3 text-sm font-bold text-white shadow-lg transition hover:bg-[#1E40AF] min-h-[48px]"
+            className="relative flex items-center justify-center gap-1.5 rounded-2xl bg-[#1D4ED8] py-3 text-sm font-bold text-white shadow-lg transition hover:bg-[#1E40AF] min-h-[48px]"
           >
-            💬 Chat Driver
+            <ChatIcon className="h-4 w-4" />
+            Chat Driver
             {unreadCount > 0 && (
               <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white shadow">
                 {unreadCount > 9 ? "9+" : unreadCount}
@@ -299,9 +316,10 @@ export default function BookingPanel({
           <button
             type="button"
             onClick={() => setHelpOpen(true)}
-            className="rounded-2xl border-2 border-[#1D4ED8]/20 bg-white py-3 text-center text-sm font-bold text-[#1D4ED8] transition hover:bg-[#EFF6FF] min-h-[48px]"
+            className="flex items-center justify-center gap-1.5 rounded-2xl border-2 border-[#1D4ED8]/20 bg-white py-3 text-center text-sm font-bold text-[#1D4ED8] transition hover:bg-[#EFF6FF] min-h-[48px]"
           >
-            🚨 Bantuan
+            <AlertIcon className="h-4 w-4" />
+            Bantuan
           </button>
         </div>
 
@@ -317,8 +335,9 @@ export default function BookingPanel({
               className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
-              <h2 className="text-base font-black text-[#0F172A]">
-                🆘 Pusat Bantuan &amp; Darurat RODAKU
+              <h2 className="flex items-center gap-2 text-base font-black text-[#0F172A]">
+                <HelpIcon className="h-5 w-5 text-red-500" />
+                Pusat Bantuan &amp; Darurat RODAKU
               </h2>
               <p className="mt-1 text-xs text-slate-500">
                 Bantuan in-app tanpa membuka aplikasi lain. Semua aksi aman di dalam aplikasi.
@@ -330,9 +349,10 @@ export default function BookingPanel({
                     onShareTrip?.();
                     setShared(true);
                   }}
-                  className="w-full rounded-2xl bg-[#1D4ED8] py-3 text-sm font-bold text-white transition hover:bg-[#1E40AF] min-h-[48px]"
+                  className="flex w-full items-center justify-center gap-1.5 rounded-2xl bg-[#1D4ED8] py-3 text-sm font-bold text-white transition hover:bg-[#1E40AF] min-h-[48px]"
                 >
-                  📍 {shared ? "Lokasi Perjalanan Dibagikan ✓" : "Bagikan Lokasi Perjalanan"}
+                  <LocationPinIcon className="h-4 w-4" />
+                  {shared ? "Lokasi Perjalanan Dibagikan ✓" : "Bagikan Lokasi Perjalanan"}
                 </button>
                 <button
                   type="button"
@@ -340,9 +360,10 @@ export default function BookingPanel({
                     onReportIssue?.();
                     setHelpOpen(false);
                   }}
-                  className="w-full rounded-2xl border-2 border-amber-200 bg-amber-50 py-3 text-sm font-bold text-amber-800 transition hover:bg-amber-100 min-h-[48px]"
+                  className="flex w-full items-center justify-center gap-1.5 rounded-2xl border-2 border-amber-200 bg-amber-50 py-3 text-sm font-bold text-amber-800 transition hover:bg-amber-100 min-h-[48px]"
                 >
-                  📝 Lapor Kendala ke Admin
+                  <NoteIcon className="h-4 w-4" />
+                  Lapor Kendala ke Admin
                 </button>
                 <button
                   type="button"
@@ -350,9 +371,10 @@ export default function BookingPanel({
                     setHelpOpen(false);
                     onOpenChat?.();
                   }}
-                  className="w-full rounded-2xl border-2 border-emerald-200 bg-emerald-50 py-3 text-sm font-bold text-emerald-700 transition hover:bg-emerald-100 min-h-[48px]"
+                  className="flex w-full items-center justify-center gap-1.5 rounded-2xl border-2 border-emerald-200 bg-emerald-50 py-3 text-sm font-bold text-emerald-700 transition hover:bg-emerald-100 min-h-[48px]"
                 >
-                  💬 Hubungi via Chat
+                  <ChatIcon className="h-4 w-4" />
+                  Hubungi via Chat
                 </button>
                 <button
                   type="button"
@@ -411,7 +433,9 @@ export default function BookingPanel({
           disabled={Boolean(orderStatus)}
         />
         <div className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-slate-50/60 px-3 py-1.5">
-          <span aria-hidden className="shrink-0 text-xs text-slate-400">📝</span>
+          <span aria-hidden className="shrink-0 text-slate-400">
+            <NoteIcon className="h-3.5 w-3.5" />
+          </span>
           <input
             type="text"
             value={driverNote}
@@ -447,9 +471,10 @@ export default function BookingPanel({
           type="button"
           onClick={detectLocation}
           disabled={geoState === "locating" || Boolean(orderStatus)}
-          className="self-end rounded-full bg-[#EFF6FF] px-3 py-2 text-[11px] font-bold text-[#1D4ED8] transition hover:bg-blue-100 disabled:opacity-60 min-h-[48px]"
+          className="flex items-center gap-1.5 self-end rounded-full bg-[#EFF6FF] px-3 py-2 text-[11px] font-bold text-[#1D4ED8] transition hover:bg-blue-100 disabled:opacity-60 min-h-[48px]"
         >
-          📍 {geoState === "locating" ? "Mendeteksi..." : "Lokasi Saya"}
+          <LocationPinIcon className="h-3.5 w-3.5" />
+          {geoState === "locating" ? "Mendeteksi..." : "Lokasi Saya"}
         </button>
         {geoMessage && (
           <p className="rounded-xl bg-amber-50 px-3 py-1.5 text-[11px] text-amber-800">{geoMessage}</p>
@@ -466,9 +491,10 @@ export default function BookingPanel({
                 onClick={() => pickPopular(place)}
                 disabled={Boolean(orderStatus)}
                 title={place.address}
-                className="rounded-full bg-white px-3 py-2 text-[11px] font-bold text-[#1D4ED8] shadow-sm ring-1 ring-blue-100 transition hover:bg-[#EFF6FF] disabled:opacity-60 min-h-[48px]"
+                className="flex items-center gap-1.5 rounded-full bg-white px-3 py-2 text-[11px] font-bold text-[#1D4ED8] shadow-sm ring-1 ring-blue-100 transition hover:bg-[#EFF6FF] disabled:opacity-60 min-h-[48px]"
               >
-                📍 {place.label}
+                <LocationPinIcon className="h-3.5 w-3.5" />
+                {place.label}
               </button>
             ))}
           </div>
@@ -500,12 +526,12 @@ export default function BookingPanel({
                 }`}
               >
                 <span
-                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-2xl ${
-                    active ? "bg-[#1D4ED8]/10" : "bg-slate-100"
+                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
+                    active ? "bg-[#1D4ED8]/10 text-[#1D4ED8]" : "bg-slate-100 text-slate-600"
                   }`}
                   aria-hidden
                 >
-                  {meta.icon}
+                  <meta.Icon className="h-6 w-6" />
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">

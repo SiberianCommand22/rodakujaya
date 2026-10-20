@@ -537,7 +537,7 @@ export default function DriverDashboard({
               if (completedOrder) {
                 setReceipt({
                   ...active,
-                  updatedAt: completedOrder.updatedAt,
+                  updatedAt: completedOrder.completedAt ?? completedOrder.updatedAt,
                   customer: completedOrder.customer ?? null,
                   driver: completedOrder.driver
                     ? {
@@ -658,7 +658,7 @@ export default function DriverDashboard({
         <button
           type="button"
           onClick={handleLogout}
-          className="rounded-2xl bg-red-500 px-5 py-2.5 text-sm font-black shadow-xl"
+          className="min-h-[48px] rounded-2xl bg-red-500 px-5 py-3 text-sm font-black shadow-xl"
         >
           Keluar
         </button>
@@ -719,14 +719,14 @@ export default function DriverDashboard({
             </button>
             <Link
               href="/"
-              className="rounded-xl bg-white/10 px-3 py-1.5 text-xs font-semibold text-white"
+              className="flex min-h-[44px] items-center rounded-xl bg-white/10 px-3 text-xs font-semibold text-white"
             >
               Pelanggan
             </Link>
             <button
               type="button"
               onClick={handleLogout}
-              className="rounded-xl bg-red-500 px-3 py-1.5 text-xs font-black text-white transition hover:bg-red-600"
+              className="flex min-h-[44px] items-center rounded-xl bg-red-500 px-3 text-xs font-black text-white transition hover:bg-red-600"
             >
               Keluar
             </button>
@@ -775,7 +775,7 @@ export default function DriverDashboard({
             <button
               type="button"
               onClick={() => setSoundOn((s) => !s)}
-              className="shrink-0 rounded-xl bg-white/10 px-3 py-2 text-xs font-semibold text-white"
+              className="min-h-[44px] shrink-0 rounded-xl bg-white/10 px-3 py-2 text-xs font-semibold text-white"
             >
               {soundOn ? "Matikan Nada" : "Aktifkan Nada"}
             </button>
@@ -829,7 +829,7 @@ export default function DriverDashboard({
                         type="button"
                         disabled={acceptBusy === order.id}
                         onClick={() => void claimOrder(order)}
-                        className="shrink-0 rounded-xl bg-[#1D4ED8] px-4 py-2 text-xs font-black text-white shadow transition hover:bg-[#1E40AF] disabled:opacity-60"
+                        className="min-h-[48px] shrink-0 rounded-xl bg-[#1D4ED8] px-4 py-2.5 text-xs font-black text-white shadow transition hover:bg-[#1E40AF] disabled:opacity-60"
                       >
                         {acceptBusy === order.id ? "…" : "Terima"}
                       </button>
@@ -906,7 +906,7 @@ export default function DriverDashboard({
                       type="button"
                       disabled={!isNext}
                       onClick={() => advance(step.status)}
-                      className={`w-full rounded-2xl py-3 text-sm font-bold shadow transition ${
+                      className={`w-full min-h-[48px] rounded-2xl py-3 text-sm font-bold shadow transition ${
                         done
                           ? "bg-emerald-100 text-emerald-700"
                           : isNext
@@ -963,7 +963,7 @@ export default function DriverDashboard({
                 role="dialog"
                 aria-modal="true"
                 aria-label="Hasil Pemesanan"
-                className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
+                className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-3xl bg-white shadow-2xl"
               >
                 {/* Header with PERJALANAN SELESAI badge */}
                 <div className="relative bg-emerald-600 px-6 py-5 text-white">
@@ -1052,7 +1052,7 @@ export default function DriverDashboard({
                     <button
                       type="button"
                       onClick={() => setReceipt(null)}
-                      className="w-full rounded-2xl bg-[#1D4ED8] py-3.5 text-sm font-bold text-white shadow-xl transition hover:bg-[#1E40AF] active:scale-[0.98]"
+                      className="min-h-[52px] w-full rounded-2xl bg-[#1D4ED8] py-3.5 text-sm font-bold text-white shadow-xl transition hover:bg-[#1E40AF] active:scale-[0.98]"
                     >
                       Selesai &amp; Cari Pesanan Baru
                     </button>
@@ -1130,14 +1130,14 @@ export default function DriverDashboard({
               <button
                 type="button"
                 onClick={declineOrder}
-                className="flex-1 rounded-2xl border-2 border-red-200 py-3 text-sm font-bold text-red-600 transition hover:bg-red-50"
+                className="min-h-[48px] flex-1 rounded-2xl border-2 border-red-200 py-3 text-sm font-bold text-red-600 transition hover:bg-red-50"
               >
                 Tolak
               </button>
               <button
                 type="button"
                 onClick={acceptOrder}
-                className="flex-[2] rounded-2xl bg-[#1D4ED8] py-3 text-sm font-black text-white shadow-xl transition hover:bg-[#1E40AF]"
+                className="min-h-[52px] flex-[2] rounded-2xl bg-[#1D4ED8] py-3 text-sm font-black text-white shadow-xl transition hover:bg-[#1E40AF]"
               >
                 Terima ({countdown})
               </button>

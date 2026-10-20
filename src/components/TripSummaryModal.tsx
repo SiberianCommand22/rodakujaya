@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { NoteIcon } from "@/components/icons";
 import { formatIDR } from "@/lib/utils";
 import { SOCKET_EVENTS, getSocket } from "@/lib/socket";
 import {
@@ -254,7 +255,7 @@ export default function TripSummaryModal({
           role="dialog"
           aria-modal="true"
           aria-label="Hasil Pemesanan"
-          className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
+          className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-3xl bg-white shadow-2xl"
         >
           {/* Header with PERJALANAN SELESAI badge */}
           <div className="relative bg-emerald-600 px-6 py-5 text-white">
@@ -346,7 +347,7 @@ export default function TripSummaryModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 rounded-2xl border border-slate-200 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+                className="min-h-[48px] flex-1 rounded-2xl border border-slate-200 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
               >
                 Selesai
               </button>
@@ -356,7 +357,7 @@ export default function TripSummaryModal({
                   onClose();
                   window.location.href = "/";
                 }}
-                className="flex-1 rounded-2xl bg-[#1D4ED8] py-3 text-sm font-bold text-white shadow-xl transition hover:bg-[#1E40AF] active:scale-[0.98]"
+                className="min-h-[52px] flex-1 rounded-2xl bg-[#1D4ED8] py-3 text-sm font-bold text-white shadow-xl transition hover:bg-[#1E40AF] active:scale-[0.98]"
               >
                 Pesan Kembali
               </button>
@@ -374,7 +375,7 @@ export default function TripSummaryModal({
         role="dialog"
         aria-modal="true"
         aria-label="Ringkasan perjalanan"
-        className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
+        className="flex max-h-[92dvh] w-full max-w-md flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
       >
         <div className="relative bg-[#1D4ED8] px-6 py-5 text-white">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-200">
@@ -416,7 +417,7 @@ export default function TripSummaryModal({
             </p>
           </div>
         ) : (
-          <div className="flex max-h-[70dvh] flex-col gap-4 overflow-y-auto p-6">
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-6">
             <dl className="flex flex-col gap-2 text-sm">
               <div className="flex justify-between">
                 <dt className="text-slate-500">Jarak tempuh</dt>
@@ -509,7 +510,7 @@ export default function TripSummaryModal({
                           type="button"
                           onClick={() => void copyAccount()}
                           disabled={phase !== "idle"}
-                          className="rounded-full bg-[#1D4ED8] px-2.5 py-1 text-[10px] font-black text-white transition hover:bg-[#1E40AF] disabled:opacity-60"
+                          className="min-h-[40px] rounded-full bg-[#1D4ED8] px-3 py-1.5 text-[10px] font-black text-white transition hover:bg-[#1E40AF] disabled:opacity-60"
                         >
                           {copied ? "✓ Tersalin" : "Salin No. Rek"}
                         </button>
@@ -539,9 +540,10 @@ export default function TripSummaryModal({
                     type="button"
                     onClick={() => void copyAllBankDetails()}
                     disabled={phase !== "idle"}
-                    className="mt-2 w-full rounded-xl border border-blue-200 bg-white py-1.5 text-[11px] font-bold text-[#1D4ED8] transition hover:bg-blue-50 disabled:opacity-60"
+                    className="mt-2 flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl border border-blue-200 bg-white py-2 text-[11px] font-bold text-[#1D4ED8] transition hover:bg-blue-50 disabled:opacity-60"
                   >
-                    📋 Salin Detail Lengkap
+                    <NoteIcon className="h-3.5 w-3.5" />
+                    Salin Detail Lengkap
                   </button>
                 )}
               </div>
@@ -633,7 +635,7 @@ export default function TripSummaryModal({
                       type="button"
                       onClick={() => void submitReviewOnly(false)}
                       disabled={reviewBusy}
-                      className="flex-1 rounded-2xl border border-blue-100 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50 disabled:opacity-60"
+                      className="min-h-[48px] flex-1 rounded-2xl border border-blue-100 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50 disabled:opacity-60"
                     >
                       {phase === "processing" ? "Memproses..." : "Lewati Ulasan"}
                     </button>
@@ -646,7 +648,7 @@ export default function TripSummaryModal({
                           ? undefined
                           : "Pilih 1-5 bintang terlebih dahulu"
                       }
-                      className="flex-1 rounded-2xl bg-[#1D4ED8] py-3 text-sm font-bold text-white shadow-xl transition hover:bg-[#1E40AF] active:scale-[0.98] disabled:opacity-60"
+                      className="min-h-[52px] flex-1 rounded-2xl bg-[#1D4ED8] py-3 text-sm font-bold text-white shadow-xl transition hover:bg-[#1E40AF] active:scale-[0.98] disabled:opacity-60"
                     >
                       {phase === "processing" ? "Memproses..." : "Kirim Ulasan & Selesai"}
                     </button>
@@ -655,7 +657,7 @@ export default function TripSummaryModal({
                     type="button"
                     onClick={onClose}
                     disabled={reviewBusy}
-                    className="w-full rounded-2xl py-2 text-xs font-semibold text-slate-400 transition hover:text-slate-600 disabled:opacity-60"
+                    className="w-full min-h-[44px] rounded-2xl py-2 text-xs font-semibold text-slate-400 transition hover:text-slate-600 disabled:opacity-60"
                   >
                     Tutup
                   </button>
@@ -664,7 +666,7 @@ export default function TripSummaryModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="w-full rounded-2xl border border-blue-100 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+                  className="w-full min-h-[48px] rounded-2xl border border-blue-100 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
                 >
                   Tutup — saya akan menunggu verifikasi
                 </button>
@@ -675,7 +677,7 @@ export default function TripSummaryModal({
                       type="button"
                       onClick={() => void claimTransfer()}
                       disabled={phase !== "idle"}
-                      className="w-full rounded-2xl bg-[#1D4ED8] py-3.5 text-sm font-black text-white shadow-xl transition hover:bg-[#1E40AF] active:scale-[0.98] disabled:opacity-60"
+                      className="w-full min-h-[52px] rounded-2xl bg-[#1D4ED8] py-3.5 text-sm font-black text-white shadow-xl transition hover:bg-[#1E40AF] active:scale-[0.98] disabled:opacity-60"
                     >
                       {phase === "claiming" ? "Mengklaim..." : "Saya Sudah Transfer"}
                     </button>
@@ -684,7 +686,7 @@ export default function TripSummaryModal({
                     type="button"
                     onClick={() => void payCash()}
                     disabled={phase !== "idle"}
-                    className="w-full rounded-2xl border border-blue-100 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50 disabled:opacity-60"
+                    className="w-full min-h-[48px] rounded-2xl border border-blue-100 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50 disabled:opacity-60"
                   >
                     {phase === "claimingCash" ? "Memproses..." : "Bayar Tunai ke Driver"}
                   </button>
@@ -692,7 +694,7 @@ export default function TripSummaryModal({
                     type="button"
                     onClick={onClose}
                     disabled={phase !== "idle"}
-                    className="w-full rounded-2xl py-2 text-xs font-semibold text-slate-400 transition hover:text-slate-600 disabled:opacity-60"
+                    className="w-full min-h-[44px] rounded-2xl py-2 text-xs font-semibold text-slate-400 transition hover:text-slate-600 disabled:opacity-60"
                   >
                     Bayar nanti
                   </button>
@@ -701,7 +703,7 @@ export default function TripSummaryModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="w-full rounded-2xl border border-blue-100 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+                  className="w-full min-h-[48px] rounded-2xl border border-blue-100 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
                 >
                   Tutup
                 </button>

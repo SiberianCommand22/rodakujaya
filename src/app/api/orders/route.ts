@@ -205,6 +205,19 @@ const ORDER_INCLUDE = {
   review: true,
 } as const;
 
+/**
+ * Struk butuh waktu perjalanan berakhir. Kolom `completedAt` tidak ada di
+ * tabel Order, jadi dihitung dari `updatedAt` pada saat status masuk
+ * AWAITING_PAYMENT / COMPLETED (waktu transisi status = trip selesai).
+ */
+function withCompletedAt<
+  T extends { status: OrderStatus; updatedAt: Date },
+>(order: T): T & { completedAt: string | null } {
+  const ended =
+    order.status === "AWAITING_PAYMENT" || order.status === "COMPLETED";
+  return { ...order, completedAt: ended ? order.updatedAt.toISOString() : null };
+}
+
 export async function GET(request: Request) {
   const customer = await requireCustomer();
   if (!customer) {
@@ -235,10 +248,13 @@ export async function GET(request: Request) {
     }),
   ]);
 
+  const activeWithMeta = active.map(withCompletedAt);
+  const recentWithMeta = recent.map(withCompletedAt);
+
   // Finished trips the customer still has to settle (or rate), oldest first so
   // the modal can walk the queue in a stable, explainable order.
   // AWAITING_PAYMENT = trip ended, bank transfer not yet confirmed by driver.
-  const pending = recent
+  const pending = recentWithMeta
     .filter(
       (o) =>
         (o.status === "AWAITING_PAYMENT" ||
@@ -255,9 +271,9 @@ export async function GET(request: Request) {
   }));
 
   return NextResponse.json({
-    active,
-    recent,
-    count: recent.length,
+    active: activeWithMeta,
+    recent: recentWithMeta,
+    count: recentWithMeta.length,
     // Kept for clients that only need the head of the queue.
     pendingSettlement: pendingSettlements[0]
       ? {

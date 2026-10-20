@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+
 import RodakuLogo from "@/components/RodakuLogo";
 import { formatIDR, formatKm, type OrderStatus } from "@/lib/utils";
 
@@ -29,6 +31,16 @@ type Props = {
 };
 
 export default function EReceiptModal({ open, receipt, onClose }: Props) {
+  // Esc menutup struk, konsisten dengan modal lain (WCAG 2.1.2 "No Keyboard Trap").
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
   if (!open || !receipt) return null;
 
   const paid =
@@ -67,7 +79,11 @@ export default function EReceiptModal({ open, receipt, onClose }: Props) {
       >
         <div className="min-h-0 flex-1 overflow-y-auto print:overflow-visible">
           {/* Header hijau ala e-wallet: logo + badge status + total */}
-          <div className="bg-emerald-600 px-5 py-4 text-white print:[-webkit-print-color-adjust:exact] print:[print-color-adjust:exact]">
+          <div className="bg-emerald-600 px-5 pb-4 pt-3 text-white print:[-webkit-print-color-adjust:exact] print:[print-color-adjust:exact]">
+            <span
+              className="mx-auto mb-2 block h-1.5 w-12 rounded-full bg-white/40 sm:hidden print:hidden"
+              aria-hidden
+            />
             <div className="flex items-center justify-between gap-3">
               <RodakuLogo size="sm" variant="light" />
               <span
@@ -233,7 +249,7 @@ export default function EReceiptModal({ open, receipt, onClose }: Props) {
         </div>
 
         {/* Aksi cetak struk */}
-        <div className="flex gap-3 border-t border-slate-100 bg-white/90 px-5 py-4 print:hidden">
+        <div className="flex gap-3 border-t border-slate-100 bg-white/90 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 print:hidden">
           <button
             type="button"
             onClick={onClose}

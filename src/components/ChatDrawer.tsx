@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ChatIcon } from "@/components/icons";
 import {
   MAX_CHAT_TEXT,
   SOCKET_EVENTS,
@@ -178,9 +179,9 @@ export default function ChatDrawer({
         type="button"
         aria-label={`Chat dengan ${counterpart}`}
         onClick={toggle}
-        className="fixed bottom-24 right-4 z-[3000] flex h-14 w-14 items-center justify-center rounded-full bg-[#1D4ED8] text-2xl text-white shadow-2xl transition hover:bg-[#1E40AF] lg:bottom-6"
+        className="fixed bottom-24 right-4 z-[3000] flex h-14 w-14 items-center justify-center rounded-full bg-[#1D4ED8] text-white shadow-2xl transition hover:bg-[#1E40AF] lg:bottom-6"
       >
-        💬
+        <ChatIcon className="h-6 w-6" />
         {unread > 0 && !open && (
           <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
             {unread > 9 ? "9+" : unread}

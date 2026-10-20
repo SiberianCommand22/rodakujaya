@@ -14,6 +14,7 @@ import {
   useMapEvents,
 } from "react-leaflet";
 import { useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from "react";
+import { LocationPinIcon } from "@/components/icons";
 import { DEFAULT_CENTER, DEFAULT_ZOOM, type LatLng, type VehicleType } from "@/lib/utils";
 
 export type MapRef = {
@@ -64,7 +65,9 @@ function pickupHtml(): string {
 function dropoffHtml(): string {
   return `
     <div style="position:relative;width:44px;height:44px;">
-      <span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:30px;height:30px;border-radius:9999px;background:#EF4444;border:3px solid #ffffff;box-shadow:0 4px 14px rgba(239,68,68,.55);display:flex;align-items:center;justify-content:center;font-size:14px;line-height:1;">🏁</span>
+      <span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:30px;height:30px;border-radius:9999px;background:#EF4444;border:3px solid #ffffff;box-shadow:0 4px 14px rgba(239,68,68,.55);display:flex;align-items:center;justify-content:center;">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 22V4" /><path d="M4 4h13l-2.5 4L17 12H4" /><path d="M4 13h7" /></svg>
+      </span>
     </div>`;
 }
 
@@ -357,13 +360,12 @@ function CenterPin({
     >
       <div
         style={{
-          fontSize: 38,
-          lineHeight: 1,
           filter: "drop-shadow(0 6px 8px rgba(15,23,42,.4))",
           animation: moving ? "rodaku-pin-bounce .55s ease-in-out infinite" : "none",
+          color: "#EF4444",
         }}
       >
-        📍
+        <LocationPinIcon className="h-9 w-9" />
       </div>
       <div
         style={{
